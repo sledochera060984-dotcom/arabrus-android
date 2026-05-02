@@ -22,10 +22,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.CollectionsBookmark
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -135,6 +142,7 @@ fun ArabrusApp() {
         ) {
             AppShell {
                 Header()
+                HeroBanner()
                 StatusCard()
 
                 when (currentScreen) {
@@ -213,6 +221,34 @@ private fun Header() {
 }
 
 @Composable
+private fun HeroBanner() {
+    Spacer(Modifier.height(10.dp))
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFFECFEFF), RoundedCornerShape(14.dp))
+            .border(1.dp, Color(0xFFA5F3FC), RoundedCornerShape(14.dp))
+            .padding(12.dp),
+    ) {
+        Column(horizontalAlignment = Alignment.Start) {
+            Text(
+                text = "Арабско-русский словарь",
+                color = ArabrusText,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Интерфейс повторяет структуру GitHub Pages версии: словарь, избранное, карточки и заметки.",
+                color = ArabrusMuted,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+            )
+        }
+    }
+}
+
+@Composable
 private fun StatusCard() {
     Spacer(Modifier.height(14.dp))
     Box(
@@ -253,7 +289,14 @@ private fun DictionaryScreen(
     )
 
     Spacer(Modifier.height(10.dp))
-    ChipsRow(listOf("Все", "Глаголы", "Избранное", "Карточки"))
+    ChipsRow(listOf("Все", "Глаголы", "Существительные", "Фразы"))
+    Spacer(Modifier.height(8.dp))
+    Text(
+        text = "Найдено: ${words.size}",
+        color = ArabrusMuted,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+    )
     Spacer(Modifier.height(8.dp))
 
     if (words.isEmpty()) {
@@ -523,6 +566,14 @@ private fun BottomTabs(
     currentScreen: Screen,
     onSelect: (Screen) -> Unit,
 ) {
+    val tabMeta = mapOf(
+        Screen.Dictionary to (Icons.Default.Bookmark to "Словарь"),
+        Screen.Favorites to (Icons.Default.Bookmarks to "Избранное"),
+        Screen.Cards to (Icons.Default.CollectionsBookmark to "Карточки"),
+        Screen.Notes to (Icons.Default.EditNote to "Заметки"),
+        Screen.Settings to (Icons.Default.Settings to "Настройки"),
+    )
+
     Surface(
         color = Color.White,
         shadowElevation = 8.dp,
@@ -535,6 +586,7 @@ private fun BottomTabs(
         ) {
             Screen.values().forEach { screen ->
                 val selected = currentScreen == screen
+                val (icon, title) = tabMeta.getValue(screen)
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -543,13 +595,22 @@ private fun BottomTabs(
                         .padding(vertical = 10.dp, horizontal = 4.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = screen.title,
-                        color = if (selected) Color.White else ArabrusMuted,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        textAlign = TextAlign.Center,
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = title,
+                            tint = if (selected) Color.White else ArabrusMuted,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = screen.title,
+                            color = if (selected) Color.White else ArabrusMuted,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
             }
         }
