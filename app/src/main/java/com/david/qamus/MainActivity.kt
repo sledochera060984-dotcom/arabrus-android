@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -526,25 +527,38 @@ private fun TopTabs(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Screen.values().forEach { screen ->
-                val selected = currentScreen == screen
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(if (selected) Color.White else Color.Transparent, RoundedCornerShape(10.dp))
-                        .clickable { onSelect(screen) }
-                        .padding(vertical = 10.dp, horizontal = 6.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = screen.title,
-                        color = if (selected) ArabrusGreen else ArabrusMuted,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        textAlign = TextAlign.Center,
-                    )
-                }
+                WebTab(
+                    title = screen.title,
+                    selected = currentScreen == screen,
+                    onClick = { onSelect(screen) },
+                )
             }
         }
+    }
+}
+
+
+@Composable
+private fun RowScope.WebTab(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .background(if (selected) Color.White else Color.Transparent, RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp, horizontal = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = title,
+            color = if (selected) ArabrusGreen else ArabrusMuted,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.ExtraBold,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
