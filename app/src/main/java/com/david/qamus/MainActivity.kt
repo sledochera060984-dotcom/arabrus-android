@@ -131,36 +131,35 @@ fun ArabrusApp() {
             Spacer(Modifier.height(12.dp))
 
             when (currentScreen) {
-                    Screen.Dictionary -> DictionaryScreen(
-                        query = query,
-                        onQueryChange = { query = it },
-                        words = filteredWords,
-                        favoriteMarks = favoriteMarks,
-                        onToggleFavorite = { entry ->
-                            val current = favoriteMarks[entry.id]
-                            favoriteMarks[entry.id] = if (current == null || current == FavoriteMark.None) FavoriteMark.Blue else FavoriteMark.None
-                        },
-                        onSetMark = { entry, mark -> favoriteMarks[entry.id] = mark },
-                    )
+                Screen.Dictionary -> DictionaryScreen(
+                    query = query,
+                    onQueryChange = { query = it },
+                    words = filteredWords,
+                    favoriteMarks = favoriteMarks,
+                    onToggleFavorite = { entry ->
+                        val current = favoriteMarks[entry.id]
+                        favoriteMarks[entry.id] = if (current == null || current == FavoriteMark.None) FavoriteMark.Blue else FavoriteMark.None
+                    },
+                    onSetMark = { entry, mark -> favoriteMarks[entry.id] = mark },
+                )
 
-                    Screen.Favorites -> FavoritesScreen(
-                        words = favoriteWords,
-                        favoriteMarks = favoriteMarks,
-                        onSetMark = { entry, mark -> favoriteMarks[entry.id] = mark },
-                    )
+                Screen.Favorites -> FavoritesScreen(
+                    words = favoriteWords,
+                    favoriteMarks = favoriteMarks,
+                    onSetMark = { entry, mark -> favoriteMarks[entry.id] = mark },
+                )
 
-                    Screen.Cards -> CardsScreen(
-                        words = if (favoriteWords.isEmpty()) demoWords else favoriteWords,
-                        flippedCards = flippedCards,
-                    )
+                Screen.Cards -> CardsScreen(
+                    words = if (favoriteWords.isEmpty()) demoWords else favoriteWords,
+                    flippedCards = flippedCards,
+                )
 
-                    Screen.Notes -> NotesScreen(
-                        note = note,
-                        onNoteChange = { note = it },
-                    )
+                Screen.Notes -> NotesScreen(
+                    note = note,
+                    onNoteChange = { note = it },
+                )
 
-                    Screen.Settings -> SettingsScreen()
-                }
+                Screen.Settings -> SettingsScreen()
             }
         }
     }
