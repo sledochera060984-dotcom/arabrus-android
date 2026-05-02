@@ -26,7 +26,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -103,16 +102,13 @@ fun ArabrusApp() {
     val favoriteMarks = remember { mutableStateMapOf<Int, FavoriteMark>() }
     val flippedCards = remember { mutableStateMapOf<Int, Boolean>() }
 
-    val filteredWords = remember(query, favoriteMarks.toMap()) {
-        val cleanQuery = query.trim()
-        if (cleanQuery.isBlank()) {
-            demoWords
-        } else {
-            demoWords.filter { entry ->
-                entry.arabic.contains(cleanQuery, ignoreCase = true) ||
-                    entry.russian.contains(cleanQuery, ignoreCase = true) ||
-                    entry.hint.contains(cleanQuery, ignoreCase = true)
-            }
+    val filteredWords = if (query.trim().isBlank()) {
+        demoWords
+    } else {
+        demoWords.filter { entry ->
+            entry.arabic.contains(query.trim(), ignoreCase = true) ||
+                entry.russian.contains(query.trim(), ignoreCase = true) ||
+                entry.hint.contains(query.trim(), ignoreCase = true)
         }
     }
 
@@ -178,17 +174,16 @@ fun ArabrusApp() {
 }
 
 @Composable
-private fun AppShell(content: @Composable Column.() -> Unit) {
+private fun AppShell(content: @Composable () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = ArabrusSurface,
         shape = RoundedCornerShape(22.dp),
         shadowElevation = 4.dp,
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            content = content,
-        )
+        Column(modifier = Modifier.padding(16.dp)) {
+            content()
+        }
     }
 }
 
@@ -538,7 +533,7 @@ private fun BottomTabs(
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Screen.entries.forEach { screen ->
+            Screen.values().forEach { screen ->
                 val selected = currentScreen == screen
                 Box(
                     modifier = Modifier
