@@ -28,7 +28,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -114,30 +113,24 @@ fun ArabrusApp() {
 
     val favoriteWords = demoWords.filter { favoriteMarks[it.id] != null && favoriteMarks[it.id] != FavoriteMark.None }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = ArabrusBackground,
-        bottomBar = {
-            BottomTabs(
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(ArabrusBackground)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        AppShell {
+            Header()
+            StatusCard()
+            TopTabs(
                 currentScreen = currentScreen,
                 onSelect = { currentScreen = it },
             )
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(ArabrusBackground)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            AppShell {
-                Header()
-                StatusCard()
+            Spacer(Modifier.height(12.dp))
 
-                when (currentScreen) {
+            when (currentScreen) {
                     Screen.Dictionary -> DictionaryScreen(
                         query = query,
                         onQueryChange = { query = it },
@@ -519,18 +512,18 @@ private fun ChipsRow(chips: List<String>) {
 }
 
 @Composable
-private fun BottomTabs(
+private fun TopTabs(
     currentScreen: Screen,
     onSelect: (Screen) -> Unit,
 ) {
-    Surface(
-        color = Color.White,
-        shadowElevation = 8.dp,
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFFE2E8F0), RoundedCornerShape(14.dp))
+            .padding(6.dp),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Screen.values().forEach { screen ->
@@ -538,14 +531,14 @@ private fun BottomTabs(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .background(if (selected) ArabrusGreen else Color(0xFFF1F5F9), RoundedCornerShape(12.dp))
+                        .background(if (selected) Color.White else Color.Transparent, RoundedCornerShape(10.dp))
                         .clickable { onSelect(screen) }
-                        .padding(vertical = 10.dp, horizontal = 4.dp),
+                        .padding(vertical = 10.dp, horizontal = 6.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = screen.title,
-                        color = if (selected) Color.White else ArabrusMuted,
+                        color = if (selected) ArabrusGreen else ArabrusMuted,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold,
                         textAlign = TextAlign.Center,
