@@ -78,7 +78,11 @@ class MainActivity : ComponentActivity() {
             )
         }
     }
-
+    override fun onResume() {
+        super.onResume()
+        webView?.postDelayed({ restoreSavedUser(webView) }, 250)
+        webView?.postDelayed({ restoreSavedUser(webView) }, 1000)
+    }
     private fun handleSignInResult(account: GoogleSignInAccount?) {
         if (account == null) {
             showWebMessage("Google не вернул аккаунт")
