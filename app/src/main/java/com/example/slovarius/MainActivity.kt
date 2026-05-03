@@ -2,13 +2,16 @@ package com.example.slovarius
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.util.Log
-import android.webkit.*
+import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,28 +31,31 @@ class MainActivity : ComponentActivity() {
     private lateinit var googleSignInClient: GoogleSignInClient
     private lateinit var tts: TextToSpeech
     private var webView: WebView? = null
-    
-    private val TAG = "SlovariusAuth"
-    private val PREFS_NAME = "SlovariusPrefs"
-    private val KEY_USER_JSON = "user_json"
 
-    // Launcher for Google Sign-In intent result
+    private val tag = "SlovariusAuth"
+    private val prefsName = "SlovariusPrefs"
+    private val keyUserJson = "user_json"
+
     private val signInLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-            try {
-                val account = task.getResult(ApiException::class.java)
-                handleSignInResult(account)
-            } catch (e: ApiException) {
-                Log.e(TAG, "Sign-in failed: ${e.statusCode}")
-            }
+        if (result.resultCode != Activity.RESULT_OK) {
+            Log.w(tag, "Google Sign-In cancelled or failed. resultCode=${result.resultCode}")
+            showWebMessage("Вход отменён или не выполнен")
+            return@registerForActivityResult
+        }
+
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        try {
+            val account = task.getResult(ApiException::class.java)
+            handleSignInResult(account)
+        } catch (e: ApiException) {
+            Log.e(tag, "Google Sign-In failed: ${e.statusCode}", e)
+            showWebMessage("Ошибка входа Google: ${e.statusCode}")
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize TTS
         tts = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 tts.language = Locale("ar")
@@ -58,7 +64,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Google Sign-In Configuration
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
             .requestProfile()
@@ -69,42 +74,105 @@ class MainActivity : ComponentActivity() {
         setContent {
             SlovariusWebView(
                 onWebViewCreated = { webView = it },
-                onLoginRequest = { signInLauncher.launch(googleSignInClient.signInIntent) }
+                onLoginRequest = { signInLauncher.launch(googleSignInClient.signInIntent) },
             )
         }
     }
 
     private fun handleSignInResult(account: GoogleSignInAccount?) {
-        account?.let {
-            val userObj = JSONObject().apply {
-                put("uid", it.id)
-                put("email", it.email)
-                put("displayName", it.displayName)
-                put("photoUrl", it.photoUrl?.toString())
-                put("idToken", it.idToken)
-            }
-            val userJson = userObj.toString()
-            
-            // 1. Persistent Session Management: Save to SharedPreferences
-            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
-                .putString(KEY_USER_JSON, userJson)
-                .apply()
+        if (account == null) {
+            showWebMessage("Google не вернул аккаунт")
+            return
+        }
 
+        val userObj = JSONObject().apply {
+            put("uid", account.id ?: account.email ?: "android-user")
+            put("email", account.email ?: "")
+            put("displayName", account.displayName ?: account.email ?: "Пользователь")
+            put("photoUrl", account.photoUrl?.toString() ?: "")
+            put("idToken", account.idToken ?: "")
+            put("provider", "google")
+        }
+        val userJson = userObj.toString()
+
+        getSharedPreferences(prefsName, MODE_PRIVATE).edit()
+            .putString(keyUserJson, userJson)
+            .apply()
+
+        webView?.post { restoreUserIntoWebView(userJson, callSuccessCallback = true) }
+    }
+
+    private fun restoreSavedUser(view: WebView?) {
+        val savedUserJson = getSharedPreferences(prefsName, MODE_PRIVATE).getString(keyUserJson, null)
+        if (!savedUserJson.isNullOrBlank()) {
+            view?.post { restoreUserIntoWebView(savedUserJson, callSuccessCallback = false) }
+        }
+    }
+
+    private fun restoreUserIntoWebView(userJson: String, callSuccessCallback: Boolean) {
+        val callbackLine = if (callSuccessCallback) {
+            "if (window.onAndroidLoginSuccess) window.onAndroidLoginSuccess(user);"
+        } else {
+            ""
+        }
+
+        webView?.evaluateJavascript(
+            """
+            (function() {
+                try {
+                    const user = $userJson;
+                    localStorage.setItem('arabrus_logged_in', '1');
+                    localStorage.setItem('user', JSON.stringify(user));
+                    localStorage.setItem('arabrus_user', JSON.stringify(user));
+                    document.documentElement.classList.add('prelogged-in-compact');
+                    $callbackLine
+                    if (window.applyAuthState) window.applyAuthState(user);
+                    if (window.showMsg) window.showMsg('Вход выполнен: ' + (user.email || user.displayName || 'Google'));
+                } catch (e) {
+                    console.error('Android auth restore failed', e);
+                    if (window.showMsg) window.showMsg('Ошибка восстановления входа');
+                }
+            })();
+            """.trimIndent(),
+            null,
+        )
+    }
+
+    private fun performLogout() {
+        getSharedPreferences(prefsName, MODE_PRIVATE).edit()
+            .remove(keyUserJson)
+            .apply()
+
+        googleSignInClient.signOut().addOnCompleteListener {
             webView?.post {
-                webView?.evaluateJavascript("if(window.onAndroidLoginSuccess) window.onAndroidLoginSuccess($userJson);", null)
+                webView?.evaluateJavascript(
+                    """
+                    (function() {
+                        try {
+                            localStorage.removeItem('arabrus_logged_in');
+                            localStorage.removeItem('user');
+                            localStorage.removeItem('arabrus_user');
+                            document.documentElement.classList.remove('prelogged-in-compact');
+                            if (window.applyAuthState) window.applyAuthState(null);
+                            if (window.showMsg) window.showMsg('Вы вышли из аккаунта');
+                        } catch (e) {
+                            console.error('Android logout failed', e);
+                        }
+                    })();
+                    """.trimIndent(),
+                    null,
+                )
             }
         }
     }
 
-    private fun performLogout() {
-        // Clear SharedPreferences
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().remove(KEY_USER_JSON).apply()
-        
-        // Google Sign-Out
-        googleSignInClient.signOut().addOnCompleteListener {
-            webView?.post {
-                webView?.evaluateJavascript("localStorage.clear(); location.reload();", null)
-            }
+    private fun showWebMessage(message: String) {
+        val quotedMessage = JSONObject.quote(message)
+        webView?.post {
+            webView?.evaluateJavascript(
+                "if(window.showMsg) window.showMsg($quotedMessage); else console.log($quotedMessage);",
+                null,
+            )
         }
     }
 
@@ -116,7 +184,6 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    // Bridge for JS
     inner class WebAppInterface(private val onLogin: () -> Unit) {
         @JavascriptInterface
         fun speak(text: String, lang: String = "ar") {
@@ -137,6 +204,11 @@ class MainActivity : ComponentActivity() {
         fun logout() {
             runOnUiThread { performLogout() }
         }
+
+        @JavascriptInterface
+        fun getSavedUser(): String {
+            return getSharedPreferences(prefsName, MODE_PRIVATE).getString(keyUserJson, "") ?: ""
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -147,103 +219,95 @@ class MainActivity : ComponentActivity() {
             factory = { ctx ->
                 WebView(ctx).apply {
                     onWebViewCreated(this)
-                    
-                    // Focus & Keyboard
+
                     requestFocus()
                     isFocusableInTouchMode = true
-                    
+
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
+                        databaseEnabled = true
                         allowFileAccess = true
                         allowContentAccess = true
                         userAgentString = userAgentString.replace("; wv", "")
                     }
-                    
+
                     webChromeClient = WebChromeClient()
                     addJavascriptInterface(WebAppInterface(onLoginRequest), "AndroidApp")
-                    
+
                     webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                             val url = request?.url.toString()
-                            
-                            // External Intent Handling
+
                             if (url.startsWith("mailto:") || url.startsWith("tel:") || url.contains("t.me/")) {
-                                try {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                    ctx.startActivity(intent)
-                                    return true
+                                return try {
+                                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                    true
                                 } catch (e: Exception) {
-                                    Log.e(TAG, "External link failed: $url")
+                                    Log.e(tag, "External link failed: $url", e)
+                                    false
                                 }
                             }
-                            
+
                             if (url.startsWith("file:///")) return false
-                            
-                            // Other https links
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                ctx.startActivity(intent)
-                                return true
+
+                            return try {
+                                ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                true
                             } catch (e: Exception) {
-                                return false
+                                false
                             }
                         }
 
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
-                            
-                            // 1. Restore Persistent Session
-                            val prefs = ctx.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                            val savedUserJson = prefs.getString(KEY_USER_JSON, null)
-                            if (savedUserJson != null) {
-                                view?.evaluateJavascript("""
-                                    localStorage.setItem('user', '$savedUserJson');
-                                    localStorage.setItem('arabrus_logged_in', '1');
-                                    if (window.applyAuthState) {
-                                        try {
-                                            let u = JSON.parse('$savedUserJson');
-                                            window.applyAuthState({
-                                                uid: u.uid,
-                                                email: u.email,
-                                                displayName: u.displayName,
-                                                photoURL: u.photoUrl
-                                            });
-                                        } catch(e) { window.applyAuthState(); }
-                                    }
-                                """.trimIndent(), null)
-                            }
-
-                            // 2. Advanced TTS Click Interceptor
-                            view?.evaluateJavascript("""
-                                document.addEventListener('click', function(e) {
-                                    let s = e.target.closest('.btn-speak, [onclick*="play"], [onclick*="speak"]');
-                                    if (s) {
-                                        e.preventDefault(); e.stopPropagation();
-                                        let w = s.getAttribute('onclick')?.match(/['"]([^'"]+)['"]/)?.[1];
-                                        if (!w) {
-                                            let container = s.closest('.item, .card-item, .reading-token, .item-details');
-                                            if (container) {
-                                                let ar = container.querySelector('.ar, .reading-ar, .card-front-ar, .card-front-text');
-                                                w = ar ? ar.innerText : '';
-                                            }
-                                        }
-                                        if (!w) w = s.innerText;
-                                        if (w && window.AndroidApp) window.AndroidApp.speak(w.trim(), 'ar');
-                                    }
-
-                                    let l = e.target.closest('[onclick*="toggleAuth"], [onclick*="Google"]');
-                                    if (l && window.AndroidApp) {
-                                        e.preventDefault(); e.stopPropagation();
-                                        window.AndroidApp.login();
-                                    }
-                                }, true);
-                            """.trimIndent(), null)
+                            restoreSavedUser(view)
+                            installNativeClickBridge(view)
                         }
                     }
+
                     loadUrl("file:///android_asset/index.html")
                 }
-            }
+            },
+        )
+    }
+
+    private fun installNativeClickBridge(view: WebView?) {
+        view?.evaluateJavascript(
+            """
+            (function() {
+                if (window.__androidBridgeInstalled) return;
+                window.__androidBridgeInstalled = true;
+
+                document.addEventListener('click', function(e) {
+                    const speakButton = e.target.closest('.btn-speak, [onclick*="play"], [onclick*="speak"]');
+                    if (speakButton && window.AndroidApp) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        let word = speakButton.getAttribute('data-word') || '';
+                        if (!word) {
+                            const onclick = speakButton.getAttribute('onclick') || '';
+                            const match = onclick.match(/['\"]([^'\"]+)['\"]/);
+                            word = match ? match[1] : '';
+                        }
+                        if (!word) {
+                            const container = speakButton.closest('.item, .card-item, .reading-token, .item-details');
+                            const ar = container ? container.querySelector('.ar, .reading-ar, .card-front-ar, .card-front-text') : null;
+                            word = ar ? ar.innerText : speakButton.innerText;
+                        }
+                        if (word) window.AndroidApp.speak(word.trim(), 'ar');
+                    }
+
+                    const loginButton = e.target.closest('[data-android-login], [onclick*="toggleAuth"], [onclick*="Google"]');
+                    if (loginButton && window.AndroidApp) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        window.AndroidApp.login();
+                    }
+                }, true);
+            })();
+            """.trimIndent(),
+            null,
         )
     }
 }
