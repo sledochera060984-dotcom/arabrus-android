@@ -132,15 +132,28 @@
     #trialIndicator:hover {
       filter: brightness(0.98);
     }
-    .lock-card {
-      display: none !important;
+    .lock-card { display: none !important; }
+    .lock-card .lock-icon {
+      font-size: 36px;
+      margin-bottom: 8px;
     }
-
+    .lock-card .lock-title {
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      color: #0f172a;
+    }
+    .lock-card .lock-text {
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--muted);
+      margin-bottom: 12px;
+      white-space: pre-wrap;
+    }
     .btn.locked {
-      opacity: 1 !important;
-      pointer-events: auto !important;
-    }
-
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
     .auth-row {
       display: flex;
       gap: 10px;
@@ -4284,8 +4297,7 @@ html.android-signed-in .btn.locked {
       });
     })();
   </script>
-  
-  <script>
+<script>
     (function () {
       function saveLocalOnly() {
         try {
@@ -4341,6 +4353,355 @@ html.android-signed-in .btn.locked {
       };
     })();
   </script>
+
+<script>
+(function () {
+  if (window.__arabrusLocalFavoritesInstalled) return;
+  window.__arabrusLocalFavoritesInstalled = true;
+
+  const LOCAL_FAVS_KEY = 'arabrus_favorites';
+  const LOCAL_NOTES_KEY = 'arabrus_notes';
+
+  function readJson(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return fallback;
+      const value = JSON.parse(raw);
+      return Array.isArray(value) ? value : fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  function writeJson(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
+      localStorage.setItem('arabrus_native_local_sync', '1');
+      localStorage.setItem('arabrus_last_save', String(Date.now()));
+    } catch (e) {
+      console.error('Local write failed', e);
+    }
+  }
+
+  function loadLocalState() {
+    try {
+      favorites = readJson(LOCAL_FAVS_KEY, readJson('arabrus_local_favorites', []));
+      notes = readJson(LOCAL_NOTES_KEY, readJson('arabrus_local_notes', []));
+      if (!Array.isArray(favorites)) favorites = [];
+      if (!Array.isArray(notes)) notes = [];
+    } catch (e) {
+      console.error('Local load failed', e);
+      favorites = Array.isArray(favorites) ? favorites : [];
+      notes = Array.isArray(notes) ? notes : [];
+    }
+  }
+
+  function saveLocalState() {
+    writeJson(LOCAL_FAVS_KEY, favorites);
+    writeJson(LOCAL_NOTES_KEY, notes);
+    try {
+      if (syncIndicatorEl) {
+        syncIndicatorEl.className = 'status ok';
+        syncIndicatorEl.innerText = '✅ Сохранено на устройстве';
+      }
+    } catch (_) {}
+  }
+
+  function readSavedUser() {
+    try {
+      const raw = localStorage.getItem('arabrus_user') || localStorage.getItem('user');
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function ensureLocalUser() {
+    if (user) return true;
+    const saved = readSavedUser();
+    if (saved) {
+      user = saved;
+      localStorage.setItem('arabrus_logged_in', '1');
+      return true;
+    }
+    openAuthModal();
+    return false;
+  }
+
+  function applyLocalAccessUi() {
+    try {
+      userAccess = { premiumActive: true, premiumUntilMs: 4102444800000 };
+      favSnapshotPending = false;
+      noteSnapshotPending = false;
+      document.documentElement.classList.add('prelogged-in-compact', 'android-signed-in');
+      if (syncIndicatorEl) {
+        syncIndicatorEl.className = 'status ok';
+        syncIndicatorEl.innerText = '✅ Сохранено на устройстве';
+      }
+      if (trialIndicatorEl) {
+        trialIndicatorEl.className = 'status ok';
+        trialIndicatorEl.innerText = '✅ Доступ открыт';
+      }
+    } catch (_) {}
+  }
+
+  startUserListeners = function () {
+    if (!user) return;
+    loadLocalState();
+    applyLocalAccessUi();
+    updateCompactLoginUi();
+    renderApp();
+  };
+
+  updateSyncIndicator = function () {
+    if (!syncIndicatorEl) return;
+    if (!user) {
+      syncIndicatorEl.className = 'status wait';
+      syncIndicatorEl.innerText = '☁️ Войдите в Google для сохранения на устройстве';
+      return;
+    }
+    syncIndicatorEl.className = 'status ok';
+    syncIndicatorEl.innerText = '✅ Сохранено на устройстве';
+  };
+
+  confirmFavModal = async function () {
+    if (!ensureLocalUser()) return;
+    if (!favModalWord) return;
+
+    const w = favModalWord;
+    const id = makeFavId(w.ar, w.ru);
+    const customRu = document.getElementById('favModalRu').value.trim() || w.short_ru || String(w.ru || '').split(';')[0];
+    const existing = getFavoriteByWord(w);
+
+    const payload = {
+      id,
+      ar: w.ar,
+      ruSource: w.ru,
+      customRu,
+      collection: existing?.collection || '',
+      markColor: existing?.markColor || '',
+      ts: existing?.ts || Date.now(),
+      updatedAt: Date.now()
+    };
+
+    const index = favorites.findIndex(f => f.id === id);
+    if (index >= 0) favorites[index] = { ...favorites[index], ...payload };
+    else favorites.unshift(payload);
+
+    saveLocalState();
+    closeFavModal();
+    showMsg(existing ? 'Перевод обновлён' : 'Добавлено в избранное');
+    renderApp();
+  };
+
+  toggleFavoriteDirect = async function (idx) {
+    if (!ensureLocalUser()) return;
+    const w = currentRenderedWords[idx];
+    const existing = getFavoriteByWord(w);
+    if (existing) {
+      favorites = favorites.filter(f => f.id !== existing.id);
+      saveLocalState();
+      showMsg('Удалено из избранного');
+      renderApp();
+    } else {
+      openFavModal(idx);
+    }
+  };
+
+  removeFavorite = async function (id) {
+    if (!ensureLocalUser()) return;
+    favorites = favorites.filter(f => f.id !== id);
+    selectedFavoriteIds.delete(id);
+    saveLocalState();
+    showMsg('Удалено из избранного');
+    renderApp();
+  };
+
+  confirmMarkColor = async function (color) {
+    if (!ensureLocalUser()) return;
+    if (!currentColorFavoriteId) { closeMarkColorModal(); return; }
+    const fav = favorites.find(f => f.id === currentColorFavoriteId);
+    if (fav) fav.markColor = color || '';
+    saveLocalState();
+    closeMarkColorModal();
+    showMsg(color === 'blue' ? 'Помечено синим' : color === 'red' ? 'Помечено красным' : 'Цвет убран');
+    renderApp();
+  };
+
+  confirmFolderModal = async function () {
+    const selected = document.getElementById('singleFolderSelect').value.trim();
+    const typed = document.getElementById('folderInput').value.trim();
+    const value = typed || selected;
+    if (!ensureLocalUser() || !folderModalTargetId || !folderModalMode) { closeFolderModal(); return; }
+
+    if (folderModalMode === 'fav') {
+      const fav = favorites.find(f => f.id === folderModalTargetId);
+      if (fav) fav.collection = value;
+    } else if (folderModalMode === 'note') {
+      const note = notes.find(n => n.id === folderModalTargetId);
+      if (note) {
+        note.collection = value;
+        const newId = makeNoteId(note.ar, note.ru, value);
+        note.id = newId;
+      }
+    }
+
+    saveLocalState();
+    closeFolderModal();
+    showMsg('Папка сохранена');
+    renderApp();
+  };
+
+  applyBulkFolder = async function () {
+    if (!ensureLocalUser()) return;
+    const ids = Array.from(selectedFavoriteIds);
+    if (!ids.length) { showMsg('Сначала выберите слова'); return; }
+    const existing = document.getElementById('bulkFolderSelect').value.trim();
+    const typed = document.getElementById('bulkFolderInput').value.trim();
+    const folder = typed || existing;
+    if (!folder) { showMsg('Выберите или введите папку'); return; }
+
+    favorites.forEach(f => { if (selectedFavoriteIds.has(f.id)) f.collection = folder; });
+    document.getElementById('bulkFolderInput').value = '';
+    document.getElementById('bulkFolderSelect').value = '';
+    saveLocalState();
+    showMsg('Папка сохранена');
+    toggleFavoriteSelectionMode(false);
+    renderApp();
+  };
+
+  removeSelectedFavoritesFromFolder = async function () {
+    if (!ensureLocalUser()) return;
+    const ids = Array.from(selectedFavoriteIds);
+    if (!ids.length) { showMsg('Сначала выберите слова'); return; }
+    favorites.forEach(f => { if (selectedFavoriteIds.has(f.id)) f.collection = ''; });
+    saveLocalState();
+    showMsg('Убрано из папки');
+    toggleFavoriteSelectionMode(false);
+    renderApp();
+  };
+
+  deleteSelectedFavorites = async function () {
+    if (!ensureLocalUser()) return;
+    const ids = Array.from(selectedFavoriteIds);
+    if (!ids.length) { showMsg('Сначала выберите слова'); return; }
+    favorites = favorites.filter(f => !selectedFavoriteIds.has(f.id));
+    saveLocalState();
+    showMsg('Удалено');
+    toggleFavoriteSelectionMode(false);
+    renderApp();
+  };
+
+  saveNote = async function () {
+    if (!ensureLocalUser()) return;
+    const ar = document.getElementById('manualAr').value.trim();
+    const ru = document.getElementById('manualRu').value.trim();
+    if (!ar || !ru) { showMsg('Заполните оба поля'); return; }
+    const note = { id: makeNoteId(ar, ru, ''), ar, ru, collection: '', ts: Date.now(), updatedAt: Date.now() };
+    const index = notes.findIndex(n => n.id === note.id);
+    if (index >= 0) notes[index] = { ...notes[index], ...note };
+    else notes.unshift(note);
+    document.getElementById('manualAr').value = '';
+    document.getElementById('manualRu').value = '';
+    saveLocalState();
+    showMsg('Фраза добавлена');
+    renderApp();
+  };
+
+  confirmNoteEditModal = async function () {
+    if (!ensureLocalUser()) return;
+    if (!currentEditingNoteId) return;
+    const ar = document.getElementById('noteEditModalArInput').value.trim();
+    const ru = document.getElementById('noteEditModalRu').value.trim();
+    if (!ar || !ru) { showMsg('Заполните арабский и русский текст'); return; }
+    const existing = notes.find(n => n.id === currentEditingNoteId);
+    const collection = existing?.collection || '';
+    const newId = makeNoteId(ar, ru, collection);
+    notes = notes.filter(n => n.id !== currentEditingNoteId);
+    notes.unshift({ id: newId, ar, ru, collection, ts: existing?.ts || Date.now(), updatedAt: Date.now() });
+    saveLocalState();
+    closeNoteEditModal();
+    showMsg('Запись обновлена');
+    renderApp();
+  };
+
+  removeNote = async function (id) {
+    if (!ensureLocalUser()) return;
+    notes = notes.filter(n => n.id !== id);
+    selectedNoteIds.delete(id);
+    saveLocalState();
+    showMsg('Запись удалена');
+    renderApp();
+  };
+
+  removeNoteFromFolder = async function (id) {
+    if (!ensureLocalUser()) return;
+    const note = notes.find(n => n.id === id);
+    if (!note) return;
+    note.collection = '';
+    note.id = makeNoteId(note.ar, note.ru, '');
+    saveLocalState();
+    showMsg('Убрано из папки');
+    renderApp();
+  };
+
+  applyBulkNoteFolder = async function () {
+    if (!ensureLocalUser()) return;
+    const ids = Array.from(selectedNoteIds);
+    if (!ids.length) { showMsg('Сначала выберите записи'); return; }
+    const existing = document.getElementById('bulkNoteFolderSelect').value.trim();
+    const typed = document.getElementById('bulkNoteFolderInput').value.trim();
+    const folder = typed || existing;
+    if (!folder) { showMsg('Выберите или введите папку'); return; }
+
+    notes.forEach(n => {
+      if (selectedNoteIds.has(n.id)) {
+        n.collection = folder;
+        n.id = makeNoteId(n.ar, n.ru, folder);
+      }
+    });
+    document.getElementById('bulkNoteFolderInput').value = '';
+    document.getElementById('bulkNoteFolderSelect').value = '';
+    saveLocalState();
+    showMsg('Папка сохранена');
+    toggleNoteSelectionMode(false);
+    renderApp();
+  };
+
+  deleteSelectedNotes = async function () {
+    if (!ensureLocalUser()) return;
+    const ids = Array.from(selectedNoteIds);
+    if (!ids.length) { showMsg('Сначала выберите записи'); return; }
+    notes = notes.filter(n => !selectedNoteIds.has(n.id));
+    saveLocalState();
+    showMsg('Удалено');
+    toggleNoteSelectionMode(false);
+    renderApp();
+  };
+
+  removeNoteFromFolder = removeNoteFromFolder;
+
+  window.addEventListener('load', function () {
+    if (user) {
+      loadLocalState();
+      applyLocalAccessUi();
+      renderApp();
+    }
+  });
+
+  const saved = readSavedUser();
+  if (saved && !user) {
+    user = saved;
+    localStorage.setItem('arabrus_logged_in', '1');
+    loadLocalState();
+    applyLocalAccessUi();
+    setTimeout(function () {
+      try { applyAuthState(saved); } catch (_) { renderApp(); }
+    }, 0);
+  }
+})();
+</script>
+
 </body>
 </html>
 
