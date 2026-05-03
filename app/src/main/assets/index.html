@@ -4363,6 +4363,62 @@ html.android-signed-in .btn.locked {
       });
     })();
   </script>
+  <script>
+    (function () {
+      function saveLocalOnly() {
+        try {
+          const keys = [
+            'favorites',
+            'favoriteMarks',
+            'notes',
+            'collections',
+            'folders',
+            'cards'
+          ];
+
+          keys.forEach(function (name) {
+            try {
+              if (typeof window[name] !== 'undefined') {
+                const value = window[name] instanceof Map
+                  ? Array.from(window[name].entries())
+                  : window[name];
+
+                localStorage.setItem('arabrus_' + name, JSON.stringify(value));
+              }
+            } catch (_) {}
+          });
+
+          localStorage.setItem('arabrus_native_local_sync', '1');
+          localStorage.setItem('arabrus_last_save', String(Date.now()));
+
+          if (window.showMsg) {
+            window.showMsg('Сохранено на устройстве');
+          }
+
+          return true;
+        } catch (e) {
+          console.error('Local save failed', e);
+          return true;
+        }
+      }
+
+      window.saveUserData = async function () {
+        return saveLocalOnly();
+      };
+
+      window.saveData = async function () {
+        return saveLocalOnly();
+      };
+
+      window.syncUserData = async function () {
+        return saveLocalOnly();
+      };
+
+      window.saveCloudData = async function () {
+        return saveLocalOnly();
+      };
+    })();
+  </script>
 </body>
 </html>
 
