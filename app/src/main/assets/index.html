@@ -1785,11 +1785,8 @@ html.android-signed-in .btn.locked {
   }
 
   function hasPaidAccess() {
-    if (!user) return false;
-    if (userAccess?.premiumUntilMs) return Date.now() <= userAccess.premiumUntilMs;
-    if (userAccess?.premiumActive) return true;
-    return false;
-  }
+  return true;
+}
 
   function getTrialInfo() {
     if (!user) return { active: false, expired: false, daysLeft: 0, endMs: 0 };
@@ -1855,11 +1852,9 @@ html.android-signed-in .btn.locked {
     }
   }
 
-  function showActivationPrompt() {
-    if (!user) { openAuthModal(); return; }
-    if (hasPaidAccess()) return;
-    openActivationContact();
-  }
+ function showActivationPrompt() {
+  return false;
+}
 
   function renderLockedFeature(featureName) {
     return `
