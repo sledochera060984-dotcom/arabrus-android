@@ -80,8 +80,14 @@ class MainActivity : ComponentActivity() {
     }
     override fun onResume() {
         super.onResume()
-        webView?.postDelayed({ restoreSavedUser(webView) }, 250)
-        webView?.postDelayed({ restoreSavedUser(webView) }, 1000)
+
+        GoogleSignIn.getLastSignedInAccount(this)?.let { account ->
+            handleSignInResult(account)
+        }
+
+        webView?.postDelayed({ restoreSavedUser(webView) }, 300)
+        webView?.postDelayed({ restoreSavedUser(webView) }, 1200)
+        webView?.postDelayed({ restoreSavedUser(webView) }, 2500)
     }
     private fun handleSignInResult(account: GoogleSignInAccount?) {
         if (account == null) {
@@ -109,7 +115,7 @@ class MainActivity : ComponentActivity() {
     private fun restoreSavedUser(view: WebView?) {
         val savedUserJson = getSharedPreferences(prefsName, MODE_PRIVATE).getString(keyUserJson, null)
         if (!savedUserJson.isNullOrBlank()) {
-            view?.post { restoreUserIntoWebView(savedUserJson, callSuccessCallback = false) }
+            view?.post { restoreUserIntoWebView(savedUserJson, callSuccessCallback = true) }
         }
     }
 
