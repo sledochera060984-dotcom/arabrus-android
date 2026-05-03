@@ -138,38 +138,7 @@ class MainActivity : ComponentActivity() {
                     localStorage.setItem('arabrus_access_open', '1');
                     document.documentElement.classList.add('prelogged-in-compact');
                     $callbackLine
-                    if (window.applyAuthState) window.applyAuthState(user); window.__androidSavedUser = user;
-
-if (window.__androidAuthKeeper) {
-    clearInterval(window.__androidAuthKeeper);
-}
-
-window.__androidAuthKeeper = setInterval(function() {
-    try {
-        localStorage.setItem('arabrus_logged_in', '1');
-        localStorage.setItem('user', JSON.stringify(window.__androidSavedUser));
-        localStorage.setItem('arabrus_user', JSON.stringify(window.__androidSavedUser));
-        localStorage.setItem('arabrus_native_local_sync', '1');
-        localStorage.setItem('arabrus_access_open', '1');
-
-        if (window.applyAuthState) {
-            window.applyAuthState(window.__androidSavedUser);
-        }
-    } catch (e) {
-        console.error('Android auth keeper failed', e);
-    }
-}, 1000);
-
-document.addEventListener('visibilitychange', function() {
-    if (!document.hidden && window.__androidSavedUser) {
-        localStorage.setItem('arabrus_logged_in', '1');
-        localStorage.setItem('user', JSON.stringify(window.__androidSavedUser));
-        localStorage.setItem('arabrus_user', JSON.stringify(window.__androidSavedUser));
-        if (window.applyAuthState) {
-            window.applyAuthState(window.__androidSavedUser);
-        }
-    }
-});
+                    if (window.applyAuthState) window.applyAuthState(user);
                     if (window.AndroidNativeBridge && window.AndroidNativeBridge.fixSyncUi) {
                         window.AndroidNativeBridge.fixSyncUi();
                     }
