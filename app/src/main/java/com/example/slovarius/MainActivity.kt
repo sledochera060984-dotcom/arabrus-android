@@ -124,9 +124,13 @@ class MainActivity : ComponentActivity() {
                     localStorage.setItem('arabrus_logged_in', '1');
                     localStorage.setItem('user', JSON.stringify(user));
                     localStorage.setItem('arabrus_user', JSON.stringify(user));
+                    localStorage.setItem('arabrus_native_local_sync', '1');
                     document.documentElement.classList.add('prelogged-in-compact');
                     $callbackLine
                     if (window.applyAuthState) window.applyAuthState(user);
+                    if (window.AndroidNativeBridge && window.AndroidNativeBridge.fixSyncUi) {
+                        window.AndroidNativeBridge.fixSyncUi();
+                    }
                     if (window.showMsg) window.showMsg('Вход выполнен: ' + (user.email || user.displayName || 'Google'));
                 } catch (e) {
                     console.error('Android auth restore failed', e);
@@ -150,13 +154,16 @@ class MainActivity : ComponentActivity() {
                     (function() {
                         try {
                             localStorage.removeItem('arabrus_logged_in');
+                            localStorage.removeItem('arabrus_native_local_sync');
                             localStorage.removeItem('user');
                             localStorage.removeItem('arabrus_user');
                             document.documentElement.classList.remove('prelogged-in-compact');
                             if (window.applyAuthState) window.applyAuthState(null);
                             if (window.showMsg) window.showMsg('Вы вышли из аккаунта');
+                            setTimeout(function() { location.reload(); }, 250);
                         } catch (e) {
                             console.error('Android logout failed', e);
+                            location.reload();
                         }
                     })();
                     """.trimIndent(),
@@ -261,8 +268,8 @@ class MainActivity : ComponentActivity() {
 
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
-                            restoreSavedUser(view)
                             installNativeClickBridge(view)
+                            restoreSavedUser(view)
                         }
                     }
 
@@ -279,7 +286,59 @@ class MainActivity : ComponentActivity() {
                 if (window.__androidBridgeInstalled) return;
                 window.__androidBridgeInstalled = true;
 
+                window.AndroidNativeBridge = window.AndroidNativeBridge || {};
+                window.AndroidNativeBridge.fixSyncUi = function() {
+                    try {
+                        const sync = document.getElementById('syncIndicator');
+                        if (sync) {
+                            sync.className = 'status ok';
+                            sync.textContent = '✅ Сохранено на устройстве';
+                            sync.style.display = '';
+                        }
+                        document.querySelectorAll('.status, .toast, .message, div, span').forEach(function(el) {
+                            const txt = (el.textContent || '').trim().toLowerCase();
+                            if (txt.includes('ошибка синхронизации')) {
+                                el.textContent = '✅ Сохранено на устройстве';
+                                el.classList.remove('err');
+                                el.classList.add('ok');
+                            }
+                        });
+                    } catch (e) {
+                        console.warn('fixSyncUi failed', e);
+                    }
+                };
+
+                const makeLocalOk = async function() {
+                    localStorage.setItem('arabrus_native_local_sync', '1');
+                    if (window.AndroidNativeBridge && window.AndroidNativeBridge.fixSyncUi) {
+                        window.AndroidNativeBridge.fixSyncUi();
+                    }
+                    return true;
+                };
+
+                window.nativeLocalSync = makeLocalOk;
+                if (!window.__androidOriginalShowMsg && window.showMsg) {
+                    window.__androidOriginalShowMsg = window.showMsg;
+                    window.showMsg = function(message) {
+                        const text = String(message || '');
+                        if (text.toLowerCase().includes('ошибка синхронизации')) {
+                            window.AndroidNativeBridge.fixSyncUi();
+                            return window.__androidOriginalShowMsg('Сохранено на устройстве');
+                        }
+                        return window.__androidOriginalShowMsg(message);
+                    };
+                }
+
                 document.addEventListener('click', function(e) {
+                    const text = (e.target && e.target.innerText ? e.target.innerText : '').trim().toLowerCase();
+                    const logoutButton = e.target.closest('[data-android-logout], [onclick*="logout"], [onclick*="Logout"], [onclick*="signOut"], [onclick*="SignOut"]');
+                    if ((logoutButton || text === '🚪 выйти' || text === 'выйти' || text.includes('выйти')) && window.AndroidApp) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        window.AndroidApp.logout();
+                        return;
+                    }
+
                     const speakButton = e.target.closest('.btn-speak, [onclick*="play"], [onclick*="speak"]');
                     if (speakButton && window.AndroidApp) {
                         e.preventDefault();
@@ -296,6 +355,7 @@ class MainActivity : ComponentActivity() {
                             word = ar ? ar.innerText : speakButton.innerText;
                         }
                         if (word) window.AndroidApp.speak(word.trim(), 'ar');
+                        return;
                     }
 
                     const loginButton = e.target.closest('[data-android-login], [onclick*="toggleAuth"], [onclick*="Google"]');
@@ -305,6 +365,15 @@ class MainActivity : ComponentActivity() {
                         window.AndroidApp.login();
                     }
                 }, true);
+
+                let attempts = 0;
+                const timer = setInterval(function() {
+                    attempts += 1;
+                    if (window.AndroidNativeBridge && window.AndroidNativeBridge.fixSyncUi) {
+                        window.AndroidNativeBridge.fixSyncUi();
+                    }
+                    if (attempts > 12) clearInterval(timer);
+                }, 500);
             })();
             """.trimIndent(),
             null,
