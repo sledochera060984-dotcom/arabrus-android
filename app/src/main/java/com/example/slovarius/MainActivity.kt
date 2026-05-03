@@ -125,11 +125,15 @@ class MainActivity : ComponentActivity() {
                     localStorage.setItem('user', JSON.stringify(user));
                     localStorage.setItem('arabrus_user', JSON.stringify(user));
                     localStorage.setItem('arabrus_native_local_sync', '1');
+                    localStorage.setItem('arabrus_access_open', '1');
                     document.documentElement.classList.add('prelogged-in-compact');
                     $callbackLine
                     if (window.applyAuthState) window.applyAuthState(user);
                     if (window.AndroidNativeBridge && window.AndroidNativeBridge.fixSyncUi) {
                         window.AndroidNativeBridge.fixSyncUi();
+                    }
+                    if (window.AndroidNativeBridge && window.AndroidNativeBridge.openLocalAccess) {
+                        window.AndroidNativeBridge.openLocalAccess();
                     }
                     if (window.showMsg) window.showMsg('Вход выполнен: ' + (user.email || user.displayName || 'Google'));
                 } catch (e) {
@@ -155,6 +159,7 @@ class MainActivity : ComponentActivity() {
                         try {
                             localStorage.removeItem('arabrus_logged_in');
                             localStorage.removeItem('arabrus_native_local_sync');
+                            localStorage.removeItem('arabrus_access_open');
                             localStorage.removeItem('user');
                             localStorage.removeItem('arabrus_user');
                             document.documentElement.classList.remove('prelogged-in-compact');
@@ -287,6 +292,38 @@ class MainActivity : ComponentActivity() {
                 window.__androidBridgeInstalled = true;
 
                 window.AndroidNativeBridge = window.AndroidNativeBridge || {};
+
+                window.AndroidNativeBridge.openLocalAccess = function() {
+                    try {
+                        localStorage.setItem('arabrus_access_open', '1');
+
+                        ['canUseFeature', 'hasAccess', 'requireAccess', 'isAccessAllowed'].forEach(function(name) {
+                            try { window[name] = function() { return true; }; } catch (_) {}
+                        });
+
+                        document.querySelectorAll('.lock-card').forEach(function(card) {
+                            card.style.display = 'none';
+                        });
+
+                        document.querySelectorAll('.tab, .chip, button, .btn').forEach(function(el) {
+                            if (el.textContent) el.textContent = el.textContent.replace(/🔒/g, '').trim();
+                            el.classList.remove('locked');
+                            el.removeAttribute('disabled');
+                            el.style.pointerEvents = '';
+                            el.style.opacity = '';
+                        });
+
+                        const trial = document.getElementById('trialIndicator');
+                        if (trial) {
+                            trial.className = 'status ok';
+                            trial.textContent = '✅ Доступ открыт';
+                            trial.style.display = '';
+                        }
+                    } catch (e) {
+                        console.warn('openLocalAccess failed', e);
+                    }
+                };
+
                 window.AndroidNativeBridge.fixSyncUi = function() {
                     try {
                         const sync = document.getElementById('syncIndicator');
@@ -313,6 +350,9 @@ class MainActivity : ComponentActivity() {
                     if (window.AndroidNativeBridge && window.AndroidNativeBridge.fixSyncUi) {
                         window.AndroidNativeBridge.fixSyncUi();
                     }
+                    if (window.AndroidNativeBridge && window.AndroidNativeBridge.openLocalAccess) {
+                        window.AndroidNativeBridge.openLocalAccess();
+                    }
                     return true;
                 };
 
@@ -321,9 +361,14 @@ class MainActivity : ComponentActivity() {
                     window.__androidOriginalShowMsg = window.showMsg;
                     window.showMsg = function(message) {
                         const text = String(message || '');
-                        if (text.toLowerCase().includes('ошибка синхронизации')) {
+                        const lower = text.toLowerCase();
+                        if (lower.includes('ошибка синхронизации')) {
                             window.AndroidNativeBridge.fixSyncUi();
                             return window.__androidOriginalShowMsg('Сохранено на устройстве');
+                        }
+                        if ((lower.includes('проб') && lower.includes('законч')) || lower.includes('доступ закрыт')) {
+                            window.AndroidNativeBridge.openLocalAccess();
+                            return window.__androidOriginalShowMsg('Доступ открыт');
                         }
                         return window.__androidOriginalShowMsg(message);
                     };
@@ -372,7 +417,10 @@ class MainActivity : ComponentActivity() {
                     if (window.AndroidNativeBridge && window.AndroidNativeBridge.fixSyncUi) {
                         window.AndroidNativeBridge.fixSyncUi();
                     }
-                    if (attempts > 12) clearInterval(timer);
+                    if (window.AndroidNativeBridge && window.AndroidNativeBridge.openLocalAccess) {
+                        window.AndroidNativeBridge.openLocalAccess();
+                    }
+                    if (attempts > 20) clearInterval(timer);
                 }, 500);
             })();
             """.trimIndent(),
