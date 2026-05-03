@@ -4238,7 +4238,64 @@ body.dict-searching .reading-box {
       });
     });
   </script>
+  <script>
+    (function () {
+      function getAndroidUser() {
+        try {
+          const raw = localStorage.getItem('arabrus_user') || localStorage.getItem('user');
+          if (!raw) return null;
+          return JSON.parse(raw);
+        } catch (e) {
+          return null;
+        }
+      }
 
+      function markSignedIn(user) {
+        if (!user) return;
+        localStorage.setItem('arabrus_logged_in', '1');
+        localStorage.setItem('user', JSON.stringify(user));
+        localStorage.setItem('arabrus_user', JSON.stringify(user));
+        document.documentElement.classList.add('prelogged-in-compact');
+        document.documentElement.classList.add('android-signed-in');
+      }
+
+      const originalApplyAuthState = window.applyAuthState;
+
+      if (typeof originalApplyAuthState === 'function') {
+        window.applyAuthState = function (user) {
+          const savedUser = getAndroidUser();
+
+          if (!user && savedUser) {
+            user = savedUser;
+          }
+
+          if (user) {
+            markSignedIn(user);
+          }
+
+          return originalApplyAuthState(user);
+        };
+      }
+
+      const savedUser = getAndroidUser();
+      if (savedUser) {
+        markSignedIn(savedUser);
+        if (typeof window.applyAuthState === 'function') {
+          window.applyAuthState(savedUser);
+        }
+      }
+
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) {
+          const user = getAndroidUser();
+          if (user && typeof window.applyAuthState === 'function') {
+            markSignedIn(user);
+            window.applyAuthState(user);
+          }
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
 
