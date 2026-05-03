@@ -148,7 +148,7 @@ class MainActivity : ComponentActivity() {
                     if (window.showMsg) window.showMsg('Вход выполнен: ' + (user.email || user.displayName || 'Google'));
                 } catch (e) {
                     console.error('Android auth restore failed', e);
-                    if (window.showMsg) window.showMsg('Ошибка восстановления входа');
+                    if (window.showMg) window.showMsg('Ошибка восстановления входа');
                 }
             })();
             """.trimIndent(),
