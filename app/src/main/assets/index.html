@@ -133,6 +133,15 @@
       filter: brightness(0.98);
     }
     .lock-card {
+  display: none !important;
+  border: 1px dashed #cbd5e1;
+  border-radius: 18px;
+  background: #fff;
+  padding: 18px 16px;
+  text-align: center;
+  color: var(--text);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+}
       border: 1px dashed #cbd5e1;
       border-radius: 18px;
       background: #fff;
@@ -159,8 +168,9 @@
       white-space: pre-wrap;
     }
     .btn.locked {
-      opacity: 0.92;
-    }
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
     .auth-row {
       display: flex;
       gap: 10px;
