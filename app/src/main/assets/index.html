@@ -1141,7 +1141,20 @@ body.logged-in-compact .header {
 body.dict-searching .reading-box {
   display: none !important;
 }
+html.prelogged-in-compact .lock-card,
+html.android-signed-in .lock-card,
+html.prelogged-in-compact [class*="lock-card"],
+html.android-signed-in [class*="lock-card"] {
+  display: none !important;
+}
 
+html.prelogged-in-compact .locked,
+html.android-signed-in .locked,
+html.prelogged-in-compact .btn.locked,
+html.android-signed-in .btn.locked {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
   </style>
 </head>
 <body>
@@ -4303,6 +4316,55 @@ body.dict-searching .reading-box {
             window.applyAuthState(user);
           }
         }
+      });
+    })();
+  </script>
+  <script>
+    (function () {
+      function androidUserExists() {
+        return localStorage.getItem('arabrus_logged_in') === '1' ||
+               localStorage.getItem('arabrus_user') ||
+               localStorage.getItem('user');
+      }
+
+      function removeTrialLocks() {
+        if (!androidUserExists()) return;
+
+        document.documentElement.classList.add('prelogged-in-compact');
+        document.documentElement.classList.add('android-signed-in');
+
+        document.querySelectorAll('.lock-card, [class*="lock-card"]').forEach(function (el) {
+          el.remove();
+        });
+
+        document.querySelectorAll('.locked').forEach(function (el) {
+          el.classList.remove('locked');
+          el.removeAttribute('disabled');
+          el.style.opacity = '1';
+          el.style.pointerEvents = 'auto';
+        });
+
+        document.querySelectorAll('button, .tab, .chip, .btn').forEach(function (el) {
+          if (el.textContent) {
+            el.textContent = el.textContent.replace(/🔒/g, '').trim();
+          }
+        });
+      }
+
+      removeTrialLocks();
+
+      document.addEventListener('click', function () {
+        setTimeout(removeTrialLocks, 50);
+        setTimeout(removeTrialLocks, 300);
+      }, true);
+
+      const observer = new MutationObserver(function () {
+        requestAnimationFrame(removeTrialLocks);
+      });
+
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
       });
     })();
   </script>
