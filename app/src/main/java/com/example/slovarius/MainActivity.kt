@@ -244,7 +244,7 @@ class MainActivity : ComponentActivity() {
                                     ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                                     true
                                 } catch (e: Exception) {
-                                    Log.e(tag, "External link failed: $url", e)
+                                    Log.e(this@MainActivity.tag, "External link failed: $url", e)
                                     false
                                 }
                             }
