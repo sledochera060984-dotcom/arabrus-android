@@ -134,35 +134,13 @@
     }
     .lock-card {
       display: none !important;
-      border: 1px dashed #cbd5e1;
-      border-radius: 18px;
-      background: #fff;
-      padding: 18px 16px;
-      text-align: center;
-      color: var(--text);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.02);
     }
-    .lock-card .lock-icon {
-      font-size: 36px;
-      margin-bottom: 8px;
-    }
-    .lock-card .lock-title {
-      font-size: 18px;
-      font-weight: 800;
-      margin-bottom: 8px;
-      color: #0f172a;
-    }
-    .lock-card .lock-text {
-      font-size: 14px;
-      line-height: 1.45;
-      color: var(--muted);
-      margin-bottom: 12px;
-      white-space: pre-wrap;
-    }
+
     .btn.locked {
-  opacity: 1 !important;
-  pointer-events: auto !important;
-}
+      opacity: 1 !important;
+      pointer-events: auto !important;
+    }
+
     .auth-row {
       display: flex;
       gap: 10px;
@@ -1464,54 +1442,6 @@ html.android-signed-in .btn.locked {
     toastTimer = setTimeout(() => t.style.display = 'none', 2600);
   }
 
-  function getLocalUserKey(name) {
-    const uid = user?.uid || user?.email || 'android-user';
-    return 'arabrus_' + name + '_' + uid;
-  }
-
-  function isNativeLocalMode() {
-    try {
-      return localStorage.getItem('arabrus_native_local_sync') === '1'
-        || localStorage.getItem('arabrus_access_open') === '1'
-        || !!(db && db.__offlineStub);
-    } catch (_) {
-      return true;
-    }
-  }
-
-  function readLocalArray(name) {
-    try {
-      const raw = localStorage.getItem(getLocalUserKey(name)) || localStorage.getItem('arabrus_' + name);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (_) {
-      return [];
-    }
-  }
-
-  function writeLocalArray(name, value) {
-    try {
-      localStorage.setItem(getLocalUserKey(name), JSON.stringify(Array.isArray(value) ? value : []));
-      localStorage.setItem('arabrus_' + name, JSON.stringify(Array.isArray(value) ? value : []));
-      localStorage.setItem('arabrus_native_local_sync', '1');
-      localStorage.setItem('arabrus_last_save', String(Date.now()));
-    } catch (e) {
-      console.error('Local write failed:', e);
-    }
-  }
-
-  function loadLocalUserData() {
-    favorites = readLocalArray('favorites');
-    notes = readLocalArray('notes');
-  }
-
-  function saveLocalUserData() {
-    writeLocalArray('favorites', favorites);
-    writeLocalArray('notes', notes);
-    updateSyncIndicator();
-    return true;
-  }
-
   function setStatus(text, cls) {
     statusEl.className = 'status ' + cls;
     statusEl.innerText = text;
@@ -1798,12 +1728,6 @@ html.android-signed-in .btn.locked {
             : '📴 Офлайн: словарь работает, вход и синхронизация появятся при интернете');
       return;
     }
-    if (isNativeLocalMode()) {
-      syncIndicatorEl.className = 'status ok';
-      syncIndicatorEl.innerText = '✅ Сохранено на устройстве';
-      return;
-    }
-
     const hasPending = favSnapshotPending || noteSnapshotPending;
     if (!navigator.onLine && hasPending) {
       syncIndicatorEl.className = 'status wait';
@@ -2517,6 +2441,7 @@ html.android-signed-in .btn.locked {
 
   async function confirmFavModal() {
     if (!user) { openAuthModal(); return; }
+    if (!canUsePremiumFeatures()) { showActivationPrompt(); return; }
     if (!favModalWord) return;
 
     const w = favModalWord;
@@ -2525,24 +2450,18 @@ html.android-signed-in .btn.locked {
     const existing = getFavoriteByWord(w);
 
     const payload = {
-      id,
       ar: w.ar,
       ruSource: w.ru,
       customRu,
       collection: existing?.collection || '',
       markColor: existing?.markColor || '',
       ts: existing?.ts || Date.now(),
-      updatedAt: Date.now()
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
 
     try {
-      const i = favorites.findIndex(f => f.id === id);
-      if (i >= 0) favorites[i] = { ...favorites[i], ...payload };
-      else favorites.unshift(payload);
-
-      saveLocalUserData();
+      await db.collection('users').doc(user.uid).collection('favorites').doc(id).set(payload, { merge: true });
       closeFavModal();
-      renderApp();
       showMsg(existing ? 'Перевод обновлён' : 'Добавлено в избранное');
     } catch (e) {
       console.error(e);
@@ -2552,17 +2471,12 @@ html.android-signed-in .btn.locked {
 
   async function toggleFavoriteDirect(idx) {
     if (!user) { openAuthModal(); return; }
-
+    if (!canUsePremiumFeatures()) { showActivationPrompt(); return; }
     const w = currentRenderedWords[idx];
-    if (!w) { showMsg('Слово не найдено'); return; }
-
     const existing = getFavoriteByWord(w);
     if (existing) {
       try {
-        favorites = favorites.filter(f => f.id !== existing.id);
-        selectedFavoriteIds.delete(existing.id);
-        saveLocalUserData();
-        renderApp();
+        await db.collection('users').doc(user.uid).collection('favorites').doc(existing.id).delete();
         showMsg('Удалено из избранного');
       } catch (e) {
         console.error(e);
@@ -3560,10 +3474,7 @@ html.android-signed-in .btn.locked {
     if (user) {
       btn.innerText = `Выйти (${(user.displayName || 'Пользователь').split(' ')[0]})`;
       userLine.innerText = user.email || user.uid;
-      loadLocalUserData();
-      if (!isNativeLocalMode()) {
-        startUserListeners();
-      }
+      startUserListeners();
     } else {
       btn.innerText = '🌐 Войти через Google';
       userLine.innerText = firebaseReady ? 'Не выполнен вход' : 'Офлайн-режим';
@@ -4373,55 +4284,7 @@ html.android-signed-in .btn.locked {
       });
     })();
   </script>
-  <script>
-    (function () {
-      function androidUserExists() {
-        return localStorage.getItem('arabrus_logged_in') === '1' ||
-               localStorage.getItem('arabrus_user') ||
-               localStorage.getItem('user');
-      }
-
-      function removeTrialLocks() {
-        if (!androidUserExists()) return;
-
-        document.documentElement.classList.add('prelogged-in-compact');
-        document.documentElement.classList.add('android-signed-in');
-
-        document.querySelectorAll('.lock-card, [class*="lock-card"]').forEach(function (el) {
-          el.remove();
-        });
-
-        document.querySelectorAll('.locked').forEach(function (el) {
-          el.classList.remove('locked');
-          el.removeAttribute('disabled');
-          el.style.opacity = '1';
-          el.style.pointerEvents = 'auto';
-        });
-
-        document.querySelectorAll('button, .tab, .chip, .btn').forEach(function (el) {
-          if (el.textContent) {
-            el.textContent = el.textContent.replace(/🔒/g, '').trim();
-          }
-        });
-      }
-
-      removeTrialLocks();
-
-      document.addEventListener('click', function () {
-        setTimeout(removeTrialLocks, 50);
-        setTimeout(removeTrialLocks, 300);
-      }, true);
-
-      const observer = new MutationObserver(function () {
-        requestAnimationFrame(removeTrialLocks);
-      });
-
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true
-      });
-    })();
-  </script>
+  
   <script>
     (function () {
       function saveLocalOnly() {
