@@ -40,8 +40,6 @@
 
       // If your web app uses Firebase, you might want to sign in manually with the idToken
       // but for now, we just refresh or handle UI state
-      if (window.showMsg) window.showMsg("Добро пожаловать, " + userData.displayName);
-
       // Force a UI refresh if the app is ready
       if (window.applyAuthState) {
           // Construct a mock user object that matches what your web app expects
@@ -1455,8 +1453,17 @@ html.android-signed-in .btn.locked {
   const chipsEl = document.getElementById('chips');
 
   function showMsg(text) {
+    const msg = String(text || '');
+    const lower = msg.toLowerCase();
+    if (lower.includes('вход выполнен:') ||
+        lower.includes('добро пожаловать') ||
+        lower.includes('войдите в google') ||
+        lower.includes('подключаем вход') ||
+        lower.includes('проверка пробного')) {
+      return;
+    }
     const t = document.getElementById('toast');
-    t.innerText = text;
+    t.innerText = msg;
     t.style.display = 'block';
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => t.style.display = 'none', 2600);
@@ -3841,6 +3848,106 @@ html.android-signed-in .btn.locked {
   body.dict-searching .compact-auth-bar {
     display: none !important;
   }
+
+
+  /* Local Android UI cleanup */
+  #syncIndicator,
+  #trialIndicator {
+    display: none !important;
+  }
+
+  .text-size-panel {
+    margin: 10px 0 18px;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 4px 16px rgba(15,23,42,0.04);
+    padding: 14px;
+  }
+
+  .text-size-title {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 12px;
+  }
+
+  .text-size-row {
+    display: grid;
+    grid-template-columns: 100px 1fr 100px;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .text-size-btn {
+    min-height: 54px;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: #fff;
+    color: #64748b;
+    font-size: 22px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .text-size-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(39,174,96,0.24);
+  }
+
+  .text-size-current {
+    text-align: center;
+    font-size: 15px;
+    font-weight: 800;
+    color: #334155;
+  }
+
+  .text-size-help {
+    margin-top: 12px;
+    color: #64748b;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  body.text-size-small #list .ru,
+  body.text-size-small .full-translation,
+  body.text-size-small .full-translation-fav,
+  body.text-size-small .note-preview-ru,
+  body.text-size-small .card-front-text { font-size: 13px !important; }
+
+  body.text-size-small #list .ar,
+  body.text-size-small .card-front-ar,
+  body.text-size-small .reading-ar { font-size: 24px !important; }
+
+  body.text-size-large #list .ru,
+  body.text-size-large .full-translation,
+  body.text-size-large .full-translation-fav,
+  body.text-size-large .note-preview-ru,
+  body.text-size-large .card-front-text { font-size: 18px !important; line-height: 1.55 !important; }
+
+  body.text-size-large #list .ar,
+  body.text-size-large .card-front-ar,
+  body.text-size-large .reading-ar { font-size: 34px !important; }
+
+  body.text-size-large .hint,
+  body.text-size-large .section-note,
+  body.text-size-large .home-guide-item { font-size: 16px !important; line-height: 1.55 !important; }
+
+  body.text-size-small .hint,
+  body.text-size-small .section-note,
+  body.text-size-small .home-guide-item { font-size: 12px !important; }
+
+  body:not(.dict-home) #textSizePanel,
+  body.dict-searching #textSizePanel,
+  body.compact-favs #textSizePanel,
+  body.compact-notes #textSizePanel {
+    display: none !important;
+  }
+
 </style>
 
 <script>
@@ -4754,6 +4861,197 @@ html.android-signed-in .btn.locked {
   document.addEventListener('DOMContentLoaded', cleanOldBanners);
   setTimeout(cleanOldBanners, 200);
   setTimeout(cleanOldBanners, 1000);
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__arabrusStatusAndTextSizeFixInstalled) return;
+  window.__arabrusStatusAndTextSizeFixInstalled = true;
+
+  var realOnline = navigator.onLine !== false;
+  var checkingOnline = false;
+  var lastCheck = 0;
+
+  function hasUser() {
+    try {
+      return !!(window.user || localStorage.getItem('arabrus_user') || localStorage.getItem('user') || localStorage.getItem('arabrus_logged_in') === '1');
+    } catch (_) {
+      return !!window.user;
+    }
+  }
+
+  function setDot(el, ok) {
+    if (!el) return;
+    el.className = 'compact-auth-dot ' + (ok ? 'ok' : 'warn');
+  }
+
+  function updateOnlineUi() {
+    var logged = hasUser();
+    var label = document.getElementById('compactAuthLabel');
+    var dot = document.getElementById('compactAuthDot');
+    var modalDot = document.getElementById('compactAuthStatusDot');
+    var main = document.getElementById('compactAuthStatusMain');
+    var sub = document.getElementById('compactAuthStatusSub');
+    var accessMain = document.getElementById('compactAuthAccessMain');
+    var accessSub = document.getElementById('compactAuthAccessSub');
+    var accessBtn = document.getElementById('compactAuthAccessBtn');
+
+    if (!logged) {
+      if (label) label.textContent = realOnline ? 'Онлайн' : 'Офлайн';
+      setDot(dot, realOnline);
+      setDot(modalDot, realOnline);
+      if (main) main.textContent = realOnline ? 'В сети' : 'Нет сети';
+      if (sub) sub.textContent = 'Войдите через Google для сохранения на устройстве';
+      return;
+    }
+
+    if (label) label.textContent = realOnline ? 'Онлайн' : 'Офлайн';
+    setDot(dot, realOnline);
+    setDot(modalDot, realOnline);
+    if (main) main.textContent = realOnline ? 'В сети' : 'Нет сети';
+    if (sub) sub.textContent = realOnline ? 'Сохранено на устройстве' : 'Интернета нет, данные сохранены локально';
+    if (accessMain) accessMain.textContent = 'Доступ открыт';
+    if (accessSub) accessSub.textContent = 'Избранное и блокнот работают локально на устройстве';
+    if (accessBtn) accessBtn.textContent = '☁️ Синхронизация';
+  }
+
+  async function checkRealOnline() {
+    if (checkingOnline) return;
+    if (Date.now() - lastCheck < 5000) return;
+    checkingOnline = true;
+    lastCheck = Date.now();
+
+    if (navigator.onLine === false) {
+      realOnline = false;
+      checkingOnline = false;
+      updateOnlineUi();
+      return;
+    }
+
+    try {
+      var controller = new AbortController();
+      var timer = setTimeout(function () { try { controller.abort(); } catch (_) {} }, 3000);
+      await fetch('https://www.gstatic.com/generate_204?arabrus=' + Date.now(), {
+        method: 'GET',
+        mode: 'no-cors',
+        cache: 'no-store',
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      realOnline = true;
+    } catch (_) {
+      realOnline = false;
+    }
+
+    checkingOnline = false;
+    updateOnlineUi();
+  }
+
+  var sizes = ['small', 'normal', 'large'];
+
+  function getSize() {
+    try {
+      var saved = localStorage.getItem('arabrus_text_size') || 'normal';
+      return sizes.indexOf(saved) >= 0 ? saved : 'normal';
+    } catch (_) {
+      return 'normal';
+    }
+  }
+
+  function setSize(size) {
+    if (sizes.indexOf(size) < 0) size = 'normal';
+    try { localStorage.setItem('arabrus_text_size', size); } catch (_) {}
+    document.body.classList.toggle('text-size-small', size === 'small');
+    document.body.classList.toggle('text-size-large', size === 'large');
+    updateTextPanel();
+  }
+
+  function sizeLabel(size) {
+    if (size === 'small') return 'Меньше';
+    if (size === 'large') return 'Крупный';
+    return 'Обычный';
+  }
+
+  function ensureTextPanel() {
+    var dictSection = document.getElementById('dictSection');
+    if (!dictSection) return;
+
+    var panel = document.getElementById('textSizePanel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'textSizePanel';
+      panel.className = 'text-size-panel';
+      panel.innerHTML =
+        '<div class="text-size-title">Размер текста</div>' +
+        '<div class="text-size-row">' +
+          '<button id="textSizeMinus" class="text-size-btn" type="button">A−</button>' +
+          '<div id="textSizeCurrent" class="text-size-current">Обычный</div>' +
+          '<button id="textSizePlus" class="text-size-btn" type="button">A+</button>' +
+        '</div>' +
+        '<div class="text-size-help">Можно увеличить шрифт для удобного чтения.</div>';
+      dictSection.insertAdjacentElement('afterend', panel);
+
+      document.getElementById('textSizeMinus').addEventListener('click', function () {
+        var current = getSize();
+        if (current === 'large') setSize('normal');
+        else setSize('small');
+      });
+
+      document.getElementById('textSizePlus').addEventListener('click', function () {
+        var current = getSize();
+        if (current === 'small') setSize('normal');
+        else setSize('large');
+      });
+    }
+
+    updateTextPanel();
+  }
+
+  function updateTextPanel() {
+    var size = getSize();
+    var current = document.getElementById('textSizeCurrent');
+    var minus = document.getElementById('textSizeMinus');
+    var plus = document.getElementById('textSizePlus');
+    if (current) current.textContent = sizeLabel(size);
+    if (minus) minus.classList.toggle('active', size === 'small');
+    if (plus) plus.classList.toggle('active', size === 'large');
+
+    var query = '';
+    try { query = (document.getElementById('queryInput') || {}).value || ''; } catch (_) {}
+    document.body.classList.toggle('dict-home', (typeof activeTab === 'undefined' || activeTab === 'dict') && !String(query).trim());
+  }
+
+  var originalRenderApp = typeof renderApp === 'function' ? renderApp : null;
+  if (originalRenderApp && !window.__arabrusTextSizeRenderPatched) {
+    window.__arabrusTextSizeRenderPatched = true;
+    renderApp = function () {
+      var result = originalRenderApp.apply(this, arguments);
+      setTimeout(function () { ensureTextPanel(); updateOnlineUi(); }, 0);
+      return result;
+    };
+  }
+
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.id === 'queryInput') updateTextPanel();
+  }, true);
+
+  window.addEventListener('online', function () { realOnline = true; updateOnlineUi(); checkRealOnline(); });
+  window.addEventListener('offline', function () { realOnline = false; updateOnlineUi(); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) checkRealOnline(); });
+
+  function start() {
+    ensureTextPanel();
+    setSize(getSize());
+    updateOnlineUi();
+    checkRealOnline();
+    setInterval(checkRealOnline, 15000);
+    setInterval(function () { updateOnlineUi(); updateTextPanel(); }, 1000);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
+  else start();
 })();
 </script>
 
