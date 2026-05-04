@@ -1138,6 +1138,13 @@ html.android-signed-in .btn.locked {
   opacity: 1 !important;
   pointer-events: auto !important;
 }
+  
+/* Android local build: hide old Firebase/trial banners */
+#syncIndicator,
+#trialIndicator {
+  display: none !important;
+}
+
   </style>
 </head>
 <body>
@@ -3895,7 +3902,7 @@ html.android-signed-in .btn.locked {
           </div>
 
           <div class="compact-auth-actions">
-            <button id="compactAuthAccessBtn" class="btn primary" type="button">💎 Premium</button>
+            <button id="compactAuthAccessBtn" class="btn primary" type="button">☁️ Синхронизация</button>
             <button id="compactAuthSupportBtn" class="btn" type="button">✉️ Техподдержка</button>
             <button id="compactAuthLogoutBtn" class="btn danger" type="button">🚪 Выйти</button>
             <button id="compactAuthCloseBtn" class="btn" type="button">Закрыть</button>
@@ -3939,7 +3946,7 @@ html.android-signed-in .btn.locked {
             tone: 'warn',
             short: 'Вход',
             main: 'Требуется вход',
-            sub: 'Войдите через Google, чтобы включить синхронизацию'
+            sub: 'Войдите через Google, чтобы сохранить профиль на устройстве'
           };
         }
 
@@ -3971,7 +3978,7 @@ html.android-signed-in .btn.locked {
             tone: 'ok',
             short: 'Онлайн',
             main: 'В сети',
-            sub: 'Синхронизация с облаком...'
+            sub: 'Сохранение на устройстве...'
           };
         }
 
@@ -3979,7 +3986,7 @@ html.android-signed-in .btn.locked {
           tone: 'ok',
           short: 'Онлайн',
           main: 'В сети',
-          sub: 'Всё сохранено в облаке'
+          sub: 'Сохранено на устройстве'
         };
       } catch (_) {
         return {
@@ -3992,51 +3999,16 @@ html.android-signed-in .btn.locked {
     }
 
     function getAccessState() {
-      try {
-        if (!isLoggedInNow()) {
-          return {
-            main: 'Premium — 100 ₽ в месяц',
-            sub: 'Войдите в Google, затем нажмите на алмаз 💎'
-          };
-        }
-
-        if (typeof hasPaidAccess === 'function' && hasPaidAccess()) {
-          if (typeof userAccess !== 'undefined' && userAccess && userAccess.premiumUntilMs) {
-            const d = new Date(userAccess.premiumUntilMs);
-            const day = String(d.getDate()).padStart(2, '0');
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const year = d.getFullYear();
-            return {
-              main: 'Premium активен',
-              sub: '100 ₽ в месяц · доступ до ' + day + '.' + month + '.' + year
-            };
-          }
-          return {
-            main: 'Premium активен',
-            sub: '100 ₽ в месяц · полный доступ включён'
-          };
-        }
-
-        if (typeof getTrialInfo === 'function') {
-          const trial = getTrialInfo();
-          if (trial && trial.active) {
-            return {
-              main: 'Пробный период активен',
-              sub: 'Premium — 100 ₽ в месяц. Для доступа нажмите на алмаз 💎'
-            };
-          }
-        }
-
+      if (!isLoggedInNow()) {
         return {
-          main: 'Premium — 100 ₽ в месяц',
-          sub: 'Чтобы подключить доступ, нажмите на алмаз 💎'
-        };
-      } catch (_) {
-        return {
-          main: 'Premium — 100 ₽ в месяц',
-          sub: 'Чтобы подключить доступ, нажмите на алмаз 💎'
+          main: 'Войдите через Google',
+          sub: 'После входа доступны избранное и блокнот'
         };
       }
+      return {
+        main: 'Доступ открыт',
+        sub: 'Избранное и блокнот работают локально на устройстве'
+      };
     }
 
     function updateVisibility() {
@@ -4699,6 +4671,89 @@ html.android-signed-in .btn.locked {
       try { applyAuthState(saved); } catch (_) { renderApp(); }
     }, 0);
   }
+})();
+</script>
+
+
+<script>
+(function () {
+  if (window.__arabrusCleanUiFixInstalled) return;
+  window.__arabrusCleanUiFixInstalled = true;
+
+  function hasSavedUser() {
+    try {
+      return localStorage.getItem('arabrus_logged_in') === '1' ||
+             !!localStorage.getItem('arabrus_user') ||
+             !!localStorage.getItem('user');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function cleanOldBanners() {
+    var sync = document.getElementById('syncIndicator');
+    if (sync) sync.style.display = 'none';
+
+    var trial = document.getElementById('trialIndicator');
+    if (trial) trial.style.display = 'none';
+
+    if (hasSavedUser()) {
+      document.documentElement.classList.add('prelogged-in-compact');
+      document.documentElement.classList.add('android-signed-in');
+      document.body.classList.add('logged-in-compact');
+    }
+
+    var accessMain = document.getElementById('compactAuthAccessMain');
+    var accessSub = document.getElementById('compactAuthAccessSub');
+    var accessBtn = document.getElementById('compactAuthAccessBtn');
+
+    if (accessBtn) accessBtn.textContent = '☁️ Синхронизация';
+    if (hasSavedUser()) {
+      if (accessMain) accessMain.textContent = 'Доступ открыт';
+      if (accessSub) accessSub.textContent = 'Избранное и блокнот работают локально на устройстве';
+    }
+  }
+
+  // The Android bridge used to treat a backdrop tap as "logout" because
+  // the backdrop text contains the "Выйти" button text. Stop only backdrop taps.
+  document.addEventListener('click', function (e) {
+    if (e.target && e.target.id === 'compactAuthModalWrap') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      e.target.style.display = 'none';
+      return false;
+    }
+  }, true);
+
+  // MainActivity restores the saved user after app start/resume.
+  // Hide repeated technical login toasts; keep normal user messages.
+  var waitForShowMsg = setInterval(function () {
+    if (typeof window.showMsg !== 'function' || window.__arabrusShowMsgCleaned) return;
+    window.__arabrusShowMsgCleaned = true;
+    clearInterval(waitForShowMsg);
+
+    var originalShowMsg = window.showMsg;
+    window.showMsg = function (text) {
+      var msg = String(text || '');
+      var lower = msg.toLowerCase();
+
+      if (lower.indexOf('вход выполнен:') >= 0 ||
+          lower.indexOf('добро пожаловать') >= 0 ||
+          lower.indexOf('войдите в google') >= 0 ||
+          lower.indexOf('подключаем вход') >= 0 ||
+          lower.indexOf('проверка пробного') >= 0) {
+        cleanOldBanners();
+        return;
+      }
+
+      return originalShowMsg.apply(this, arguments);
+    };
+  }, 50);
+
+  cleanOldBanners();
+  document.addEventListener('DOMContentLoaded', cleanOldBanners);
+  setTimeout(cleanOldBanners, 200);
+  setTimeout(cleanOldBanners, 1000);
 })();
 </script>
 
