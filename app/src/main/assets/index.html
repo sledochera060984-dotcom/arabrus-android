@@ -3485,7 +3485,7 @@ html.android-signed-in .btn.locked {
     const userLine = document.getElementById('userLine');
 
     if (user) {
-      btn.innerText = `Выйти (${(user.displayName || 'Пользователь').split(' ')[0]})`;
+      btn.innerText = `Выход (${(user.displayName || 'Пользователь').split(' ')[0]})`;
       userLine.innerText = user.email || user.uid;
       startUserListeners();
     } else {
@@ -3897,7 +3897,7 @@ html.android-signed-in .btn.locked {
           <div class="compact-auth-actions">
             <button id="compactAuthAccessBtn" class="btn primary" type="button">☁️ Синхронизация</button>
             <button id="compactAuthSupportBtn" class="btn" type="button">✉️ Техподдержка</button>
-            <button id="compactAuthLogoutBtn" class="btn danger" type="button">🚪 Выйти</button>
+            <button id="compactAuthLogoutBtn" class="btn danger" type="button" data-android-logout="1">🚪 Выход</button>
             <button id="compactAuthCloseBtn" class="btn" type="button">Закрыть</button>
           </div>
         </div>
@@ -3951,8 +3951,22 @@ html.android-signed-in .btn.locked {
       }
     }
 
+    let compactStableOnline = navigator.onLine !== false;
+    let compactOnlineTimer = null;
+
+    function scheduleCompactOnlineUpdate() {
+      const nextOnline = navigator.onLine !== false;
+      clearTimeout(compactOnlineTimer);
+      compactOnlineTimer = setTimeout(function () {
+        if (compactStableOnline !== nextOnline) {
+          compactStableOnline = nextOnline;
+        }
+        refreshCompactUi();
+      }, 900);
+    }
+
     function isOnlineNow() {
-      return navigator.onLine !== false;
+      return compactStableOnline;
     }
 
     function getSyncState() {
@@ -4118,14 +4132,18 @@ html.android-signed-in .btn.locked {
       setStatus = patched;
     }
 
-    window.addEventListener('online', refreshCompactUi);
-    window.addEventListener('offline', refreshCompactUi);
+    window.addEventListener('online', scheduleCompactOnlineUpdate);
+    window.addEventListener('offline', scheduleCompactOnlineUpdate);
     document.addEventListener('visibilitychange', function () {
-      if (!document.hidden) refreshCompactUi();
+      if (!document.hidden) {
+        scheduleCompactOnlineUpdate();
+        refreshCompactUi();
+      }
     });
 
     window.refreshCompactUi = refreshCompactUi;
-    setInterval(refreshCompactUi, 1500);
+    window.addEventListener('focus', scheduleCompactOnlineUpdate);
+    setInterval(refreshCompactUi, 5000);
     refreshCompactUi();
   });
 })();
