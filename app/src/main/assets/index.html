@@ -1448,6 +1448,7 @@ html.android-signed-in .btn.locked {
   const chipsEl = document.getElementById('chips');
 
   function showMsg(text) {
+    if (String(text || '').toLowerCase().startsWith('вход выполнен:')) return;
     const t = document.getElementById('toast');
     t.innerText = text;
     t.style.display = 'block';
@@ -3854,8 +3855,8 @@ html.android-signed-in .btn.locked {
       compactBar.className = 'compact-auth-bar';
       compactBar.innerHTML = `
         <button id="compactAuthBtn" class="compact-auth-btn" type="button">
-          <span id="compactAuthDot" class="compact-auth-dot"></span>
-          <span id="compactAuthLabel" class="compact-auth-label">Статус</span>
+          <span id="compactAuthDot" class="compact-auth-dot ok"></span>
+          <span id="compactAuthLabel" class="compact-auth-label">Онлайн</span>
           <span class="compact-auth-menu-icon">☰</span>
         </button>
       `;
@@ -3951,39 +3952,20 @@ html.android-signed-in .btn.locked {
       }
     }
 
-    let compactStableOnline = navigator.onLine !== false;
-    let compactOnlineTimer = null;
-
-    function scheduleCompactOnlineUpdate() {
-      const nextOnline = navigator.onLine !== false;
-      clearTimeout(compactOnlineTimer);
-      compactOnlineTimer = setTimeout(function () {
-        if (compactStableOnline !== nextOnline) {
-          compactStableOnline = nextOnline;
-        }
-        refreshCompactUi();
-      }, 900);
+    function isOnlineNow() {
+      return navigator.onLine !== false;
     }
 
-    function isOnlineNow() {
-      return compactStableOnline;
+    function scheduleCompactOnlineUpdate() {
+      refreshCompactUi();
     }
 
     function getSyncState() {
-      if (!isLoggedInNow()) {
-        return {
-          tone: 'warn',
-          short: 'Вход',
-          main: 'Требуется вход',
-          sub: 'Войдите через Google, чтобы сохранять данные на устройстве'
-        };
-      }
-
       if (!isOnlineNow()) {
         return {
           tone: 'warn',
           short: 'Офлайн',
-          main: 'Нет сети',
+          main: 'Офлайн',
           sub: 'Сохранено на устройстве'
         };
       }
@@ -4017,12 +3999,12 @@ html.android-signed-in .btn.locked {
         localStorage.setItem('arabrus_logged_in', logged ? '1' : '0');
       } catch (_) {}
 
-      if (compactBar) compactBar.style.display = logged ? 'flex' : 'none';
-      if (authRow) authRow.style.display = logged ? 'none' : 'flex';
-      if (userLine) userLine.style.display = logged ? 'none' : '';
-      if (syncEl) syncEl.style.display = logged ? 'none' : '';
+      if (compactBar) compactBar.style.display = 'flex';
+      if (authRow) authRow.style.display = 'none';
+      if (userLine) userLine.style.display = 'none';
+      if (syncEl) syncEl.style.display = 'none';
       if (trialEl) trialEl.style.display = 'none';
-      if (statusEl) statusEl.style.display = logged ? 'none' : '';
+      if (statusEl) statusEl.style.display = 'none';
     }
 
     function applyDot(el, tone) {
@@ -4056,6 +4038,7 @@ html.android-signed-in .btn.locked {
 
       if (modalAccessMain) modalAccessMain.textContent = accessState.main;
       if (modalAccessSub) modalAccessSub.textContent = accessState.sub;
+      if (accessBtn) accessBtn.textContent = isLoggedInNow() ? '☁️ Синхронизация' : '🌐 Войти через Google';
     }
 
     function openCompactMenu() {
@@ -4070,8 +4053,12 @@ html.android-signed-in .btn.locked {
     compactBtn.addEventListener('click', openCompactMenu);
     closeBtn.addEventListener('click', closeCompactMenu);
     modalWrap.addEventListener('click', function (e) {
-      if (e.target === modalWrap) closeCompactMenu();
-    });
+      if (e.target === modalWrap) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeCompactMenu();
+      }
+    }, true);
 
     accessBtn.addEventListener('click', function () {
       closeCompactMenu();
