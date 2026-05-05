@@ -1138,13 +1138,6 @@ html.android-signed-in .btn.locked {
   opacity: 1 !important;
   pointer-events: auto !important;
 }
-  
-/* Android local build: hide old Firebase/trial banners */
-#syncIndicator,
-#trialIndicator {
-  display: none !important;
-}
-
   </style>
 </head>
 <body>
@@ -3846,7 +3839,7 @@ html.android-signed-in .btn.locked {
 <script>
 (function () {
   function ready(fn) {
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
     else fn();
   }
 
@@ -3915,87 +3908,78 @@ html.android-signed-in .btn.locked {
     const compactBtn = document.getElementById('compactAuthBtn');
     const compactDot = document.getElementById('compactAuthDot');
     const compactLabel = document.getElementById('compactAuthLabel');
-
-    const modalUser = document.getElementById('compactAuthUser');
-    const modalUserSub = document.getElementById('compactAuthUserSub');
     const modalStatusDot = document.getElementById('compactAuthStatusDot');
     const modalStatusMain = document.getElementById('compactAuthStatusMain');
     const modalStatusSub = document.getElementById('compactAuthStatusSub');
+    const modalUser = document.getElementById('compactAuthUser');
+    const modalUserSub = document.getElementById('compactAuthUserSub');
     const modalAccessMain = document.getElementById('compactAuthAccessMain');
     const modalAccessSub = document.getElementById('compactAuthAccessSub');
-
     const accessBtn = document.getElementById('compactAuthAccessBtn');
     const supportBtn = document.getElementById('compactAuthSupportBtn');
     const logoutBtn = document.getElementById('compactAuthLogoutBtn');
     const closeBtn = document.getElementById('compactAuthCloseBtn');
-
     const statusEl = document.getElementById('status');
     const syncEl = document.getElementById('syncIndicator');
     const trialEl = document.getElementById('trialIndicator');
     const authRow = document.querySelector('.auth-row');
     const userLine = document.getElementById('userLine');
 
+    function readSavedUser() {
+      try {
+        const raw = localStorage.getItem('arabrus_user') || localStorage.getItem('user');
+        return raw ? JSON.parse(raw) : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function getCurrentUser() {
+      try {
+        if (typeof user !== 'undefined' && user) return user;
+      } catch (_) {}
+      return readSavedUser();
+    }
+
     function isLoggedInNow() {
-      try { return typeof user !== 'undefined' && !!user; } catch (_) { return false; }
+      try {
+        if (typeof user !== 'undefined' && !!user) return true;
+        if (localStorage.getItem('arabrus_logged_in') === '1') return true;
+        return !!readSavedUser();
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function isOnlineNow() {
+      return navigator.onLine !== false;
     }
 
     function getSyncState() {
-      try {
-        if (!isLoggedInNow()) {
-          return {
-            tone: 'warn',
-            short: 'Вход',
-            main: 'Требуется вход',
-            sub: 'Войдите через Google, чтобы сохранить профиль на устройстве'
-          };
-        }
-
-        const pending = !!(
-          (typeof favSnapshotPending !== 'undefined' && favSnapshotPending) ||
-          (typeof noteSnapshotPending !== 'undefined' && noteSnapshotPending)
-        );
-
-        if (!navigator.onLine && pending) {
-          return {
-            tone: 'warn',
-            short: 'Офлайн',
-            main: 'Нет сети',
-            sub: 'Изменения сохранены локально и ждут синхронизации'
-          };
-        }
-
-        if (!navigator.onLine) {
-          return {
-            tone: 'warn',
-            short: 'Офлайн',
-            main: 'Нет сети',
-            sub: 'Последние данные доступны локально'
-          };
-        }
-
-        if (pending) {
-          return {
-            tone: 'ok',
-            short: 'Онлайн',
-            main: 'В сети',
-            sub: 'Сохранение на устройстве...'
-          };
-        }
-
-        return {
-          tone: 'ok',
-          short: 'Онлайн',
-          main: 'В сети',
-          sub: 'Сохранено на устройстве'
-        };
-      } catch (_) {
+      if (!isLoggedInNow()) {
         return {
           tone: 'warn',
-          short: 'Статус',
-          main: 'Статус обновляется',
-          sub: ''
+          short: 'Вход',
+          main: 'Требуется вход',
+          sub: 'Войдите через Google, чтобы сохранять данные на устройстве'
         };
       }
+
+      if (!isOnlineNow()) {
+        return {
+          tone: 'warn',
+          short: 'Офлайн',
+          main: 'Нет сети',
+          sub: 'Сохранено на устройстве'
+        };
+      }
+
+      return {
+        tone: 'ok',
+        short: 'Онлайн',
+        main: 'В сети',
+        sub: 'Сохранено на устройстве'
+      };
     }
 
     function getAccessState() {
@@ -4022,19 +4006,14 @@ html.android-signed-in .btn.locked {
       if (compactBar) compactBar.style.display = logged ? 'flex' : 'none';
       if (authRow) authRow.style.display = logged ? 'none' : 'flex';
       if (userLine) userLine.style.display = logged ? 'none' : '';
-
       if (syncEl) syncEl.style.display = logged ? 'none' : '';
-      if (trialEl) trialEl.style.display = logged ? 'none' : '';
-
-      if (statusEl) {
-        statusEl.classList.toggle('compact-hideable', logged);
-        statusEl.style.display = logged ? 'none' : '';
-      }
+      if (trialEl) trialEl.style.display = 'none';
+      if (statusEl) statusEl.style.display = logged ? 'none' : '';
     }
 
     function applyDot(el, tone) {
       if (!el) return;
-      el.className = 'compact-auth-dot ' + tone;
+      el.className = 'compact-auth-dot ' + (tone || 'warn');
     }
 
     function refreshCompactUi() {
@@ -4042,6 +4021,7 @@ html.android-signed-in .btn.locked {
 
       const syncState = getSyncState();
       const accessState = getAccessState();
+      const currentUser = getCurrentUser();
 
       applyDot(compactDot, syncState.tone);
       applyDot(modalStatusDot, syncState.tone);
@@ -4051,14 +4031,9 @@ html.android-signed-in .btn.locked {
       if (modalStatusSub) modalStatusSub.textContent = syncState.sub;
 
       if (modalUser) {
-        if (isLoggedInNow()) {
-          try {
-            modalUser.textContent = user.displayName || user.email || 'Пользователь';
-            modalUserSub.textContent = user.email || '';
-          } catch (_) {
-            modalUser.textContent = 'Пользователь';
-            modalUserSub.textContent = '';
-          }
+        if (isLoggedInNow() && currentUser) {
+          modalUser.textContent = currentUser.displayName || currentUser.email || 'Пользователь';
+          modalUserSub.textContent = currentUser.email || '';
         } else {
           modalUser.textContent = 'Не выполнен вход';
           modalUserSub.textContent = '';
@@ -4080,7 +4055,6 @@ html.android-signed-in .btn.locked {
 
     compactBtn.addEventListener('click', openCompactMenu);
     closeBtn.addEventListener('click', closeCompactMenu);
-
     modalWrap.addEventListener('click', function (e) {
       if (e.target === modalWrap) closeCompactMenu();
     });
@@ -4093,7 +4067,7 @@ html.android-signed-in .btn.locked {
           else if (typeof toggleAuth === 'function') toggleAuth();
           return;
         }
-        if (typeof openActivationContact === 'function') openActivationContact();
+        if (typeof showMsg === 'function') showMsg('Сохранено на устройстве');
       } catch (_) {}
     });
 
@@ -4112,50 +4086,51 @@ html.android-signed-in .btn.locked {
     });
 
     const originalUpdateSyncIndicator = typeof updateSyncIndicator === 'function' ? updateSyncIndicator : null;
-    if (originalUpdateSyncIndicator) {
-      updateSyncIndicator = function () {
+    if (originalUpdateSyncIndicator && !originalUpdateSyncIndicator.__compactAuthPatched) {
+      const patched = function () {
         const result = originalUpdateSyncIndicator.apply(this, arguments);
         refreshCompactUi();
         return result;
       };
+      patched.__compactAuthPatched = true;
+      updateSyncIndicator = patched;
     }
 
     const originalUpdateTrialIndicator = typeof updateTrialIndicator === 'function' ? updateTrialIndicator : null;
-    if (originalUpdateTrialIndicator) {
-      updateTrialIndicator = function () {
+    if (originalUpdateTrialIndicator && !originalUpdateTrialIndicator.__compactAuthPatched) {
+      const patched = function () {
         const result = originalUpdateTrialIndicator.apply(this, arguments);
         refreshCompactUi();
         return result;
       };
-    }
-
-    const originalRenderApp = typeof renderApp === 'function' ? renderApp : null;
-    if (originalRenderApp) {
-      renderApp = function () {
-        const result = originalRenderApp.apply(this, arguments);
-        refreshCompactUi();
-        return result;
-      };
+      patched.__compactAuthPatched = true;
+      updateTrialIndicator = patched;
     }
 
     const originalSetStatus = typeof setStatus === 'function' ? setStatus : null;
-    if (originalSetStatus) {
-      setStatus = function () {
+    if (originalSetStatus && !originalSetStatus.__compactAuthPatched) {
+      const patched = function () {
         const result = originalSetStatus.apply(this, arguments);
         refreshCompactUi();
         return result;
       };
+      patched.__compactAuthPatched = true;
+      setStatus = patched;
     }
 
     window.addEventListener('online', refreshCompactUi);
     window.addEventListener('offline', refreshCompactUi);
-    document.addEventListener('visibilitychange', refreshCompactUi);
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) refreshCompactUi();
+    });
 
-    setInterval(refreshCompactUi, 1200);
+    window.refreshCompactUi = refreshCompactUi;
+    setInterval(refreshCompactUi, 1500);
     refreshCompactUi();
   });
 })();
 </script>
+
   <script>
     // Этот скрипт переопределяет стандартную функцию воспроизведения звука
     // и направляет его в наше Android-приложение (минуя проверку аккаунта)
@@ -4675,90 +4650,7 @@ html.android-signed-in .btn.locked {
 </script>
 
 
-<script>
-(function () {
-  if (window.__arabrusCleanUiFixInstalled) return;
-  window.__arabrusCleanUiFixInstalled = true;
-
-  function hasSavedUser() {
-    try {
-      return localStorage.getItem('arabrus_logged_in') === '1' ||
-             !!localStorage.getItem('arabrus_user') ||
-             !!localStorage.getItem('user');
-    } catch (_) {
-      return false;
-    }
-  }
-
-  function cleanOldBanners() {
-    var sync = document.getElementById('syncIndicator');
-    if (sync) sync.style.display = 'none';
-
-    var trial = document.getElementById('trialIndicator');
-    if (trial) trial.style.display = 'none';
-
-    if (hasSavedUser()) {
-      document.documentElement.classList.add('prelogged-in-compact');
-      document.documentElement.classList.add('android-signed-in');
-      document.body.classList.add('logged-in-compact');
-    }
-
-    var accessMain = document.getElementById('compactAuthAccessMain');
-    var accessSub = document.getElementById('compactAuthAccessSub');
-    var accessBtn = document.getElementById('compactAuthAccessBtn');
-
-    if (accessBtn) accessBtn.textContent = '☁️ Синхронизация';
-    if (hasSavedUser()) {
-      if (accessMain) accessMain.textContent = 'Доступ открыт';
-      if (accessSub) accessSub.textContent = 'Избранное и блокнот работают локально на устройстве';
-    }
-  }
-
-  // The Android bridge used to treat a backdrop tap as "logout" because
-  // the backdrop text contains the "Выйти" button text. Stop only backdrop taps.
-  document.addEventListener('click', function (e) {
-    if (e.target && e.target.id === 'compactAuthModalWrap') {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      e.target.style.display = 'none';
-      return false;
-    }
-  }, true);
-
-  // MainActivity restores the saved user after app start/resume.
-  // Hide repeated technical login toasts; keep normal user messages.
-  var waitForShowMsg = setInterval(function () {
-    if (typeof window.showMsg !== 'function' || window.__arabrusShowMsgCleaned) return;
-    window.__arabrusShowMsgCleaned = true;
-    clearInterval(waitForShowMsg);
-
-    var originalShowMsg = window.showMsg;
-    window.showMsg = function (text) {
-      var msg = String(text || '');
-      var lower = msg.toLowerCase();
-
-      if (lower.indexOf('вход выполнен:') >= 0 ||
-          lower.indexOf('добро пожаловать') >= 0 ||
-          lower.indexOf('войдите в google') >= 0 ||
-          lower.indexOf('подключаем вход') >= 0 ||
-          lower.indexOf('проверка пробного') >= 0) {
-        cleanOldBanners();
-        return;
-      }
-
-      return originalShowMsg.apply(this, arguments);
-    };
-  }, 50);
-
-  cleanOldBanners();
-  document.addEventListener('DOMContentLoaded', cleanOldBanners);
-  setTimeout(cleanOldBanners, 200);
-  setTimeout(cleanOldBanners, 1000);
-})();
-</script>
-
-
-<style id="arabrus-polish-style">
+<style id="arabrus-text-size-style">
   .text-size-panel {
     margin: 10px 0 18px;
     border: 1px solid #e2e8f0;
@@ -4784,18 +4676,25 @@ html.android-signed-in .btn.locked {
   .text-size-btn {
     border: 1px solid var(--line);
     background: #fff;
-    color: #64748b;
+    color: #94a3b8;
     border-radius: 14px;
     min-height: 46px;
     font-size: 20px;
     font-weight: 800;
     cursor: pointer;
   }
-  .text-size-btn.active {
+  .text-size-btn.ready {
     background: var(--primary);
     border-color: var(--primary);
     color: #fff;
     box-shadow: 0 4px 12px rgba(39,174,96,0.22);
+  }
+  .text-size-btn:disabled {
+    opacity: .45;
+    cursor: default;
+    background: #fff;
+    color: #94a3b8;
+    box-shadow: none;
   }
   .text-size-label {
     text-align: center;
@@ -4815,94 +4714,66 @@ html.android-signed-in .btn.locked {
     display: none !important;
   }
 
-  body.text-size-small #list .ru,
-  body.text-size-small .full-translation,
-  body.text-size-small .full-translation-fav,
-  body.text-size-small .note-preview-ru,
-  body.text-size-small .card-front-text,
-  body.text-size-small .home-guide-item {
-    font-size: 13px !important;
-    line-height: 1.35 !important;
+  body.text-size-level-1 #list .ru,
+  body.text-size-level-1 #list .full-translation,
+  body.text-size-level-1 #list .full-translation-fav,
+  body.text-size-level-1 #list .note-preview-ru,
+  body.text-size-level-1 #list .card-front-text {
+    font-size: 17px !important;
+    line-height: 1.55 !important;
   }
-  body.text-size-small #list .ar,
-  body.text-size-small .card-front-ar,
-  body.text-size-small .reading-ar {
-    font-size: 23px !important;
-    line-height: 1.2 !important;
-  }
-
-  body.text-size-large #list .ru,
-  body.text-size-large .full-translation,
-  body.text-size-large .full-translation-fav,
-  body.text-size-large .note-preview-ru,
-  body.text-size-large .card-front-text,
-  body.text-size-large .home-guide-item {
-    font-size: 18px !important;
-    line-height: 1.6 !important;
-  }
-  body.text-size-large #list .ar,
-  body.text-size-large .card-front-ar,
-  body.text-size-large .reading-ar {
-    font-size: 34px !important;
+  body.text-size-level-1 #list .ar,
+  body.text-size-level-1 #list .card-front-ar,
+  body.text-size-level-1 #list .reading-ar {
+    font-size: 32px !important;
     line-height: 1.28 !important;
   }
-  body.text-size-large .search,
-  body.text-size-large .field,
-  body.text-size-large textarea {
-    font-size: 18px !important;
+
+  body.text-size-level-2 #list .ru,
+  body.text-size-level-2 #list .full-translation,
+  body.text-size-level-2 #list .full-translation-fav,
+  body.text-size-level-2 #list .note-preview-ru,
+  body.text-size-level-2 #list .card-front-text {
+    font-size: 20px !important;
+    line-height: 1.65 !important;
   }
-  body.text-size-large .hint,
-  body.text-size-large .section-note,
-  body.text-size-large .text-size-note {
-    font-size: 15px !important;
+  body.text-size-level-2 #list .ar,
+  body.text-size-level-2 #list .card-front-ar,
+  body.text-size-level-2 #list .reading-ar {
+    font-size: 38px !important;
+    line-height: 1.3 !important;
   }
 </style>
 
-<script id="arabrus-polish-script">
+<script id="arabrus-text-size-script">
 (function () {
-  if (window.__arabrusPolishInstalled) return;
-  window.__arabrusPolishInstalled = true;
+  if (window.__arabrusTextSizeInstalled) return;
+  window.__arabrusTextSizeInstalled = true;
 
-  var TEXT_KEY = 'arabrus_text_size_level';
-  var lastReachable = navigator.onLine !== false;
+  var KEY = 'arabrus_text_size_step';
+  var labels = ['Обычный', 'Крупный', 'Очень крупный'];
 
-  function getSavedUser() {
-    try {
-      var raw = localStorage.getItem('arabrus_user') || localStorage.getItem('user');
-      return raw ? JSON.parse(raw) : null;
-    } catch (_) {
-      return null;
-    }
+  function getStep() {
+    var raw = 0;
+    try { raw = Number(localStorage.getItem(KEY) || '0'); } catch (_) {}
+    if (!Number.isFinite(raw)) raw = 0;
+    return Math.max(0, Math.min(2, Math.round(raw)));
   }
 
-  function isLoggedInLocal() {
-    try {
-      return localStorage.getItem('arabrus_logged_in') === '1' || !!getSavedUser();
-    } catch (_) {
-      return false;
-    }
+  function setStep(step) {
+    step = Math.max(0, Math.min(2, step));
+    try { localStorage.setItem(KEY, String(step)); } catch (_) {}
+    document.body.classList.remove('text-size-level-0', 'text-size-level-1', 'text-size-level-2');
+    document.body.classList.add('text-size-level-' + step);
+    updatePanel();
   }
 
-  function getTextLevel() {
-    try {
-      var value = localStorage.getItem(TEXT_KEY) || 'normal';
-      return value === 'small' || value === 'large' ? value : 'normal';
-    } catch (_) {
-      return 'normal';
-    }
-  }
+  function ensurePanel() {
+    var existing = document.getElementById('textSizePanel');
+    if (existing) return existing;
 
-  function applyTextLevel(level) {
-    document.body.classList.remove('text-size-small', 'text-size-normal', 'text-size-large');
-    document.body.classList.add('text-size-' + level);
-    try { localStorage.setItem(TEXT_KEY, level); } catch (_) {}
-    updateTextSizePanel();
-  }
-
-  function ensureTextSizePanel() {
-    if (document.getElementById('textSizePanel')) return;
     var dictSection = document.getElementById('dictSection');
-    if (!dictSection) return;
+    if (!dictSection) return null;
 
     var panel = document.createElement('div');
     panel.id = 'textSizePanel';
@@ -4910,140 +4781,69 @@ html.android-signed-in .btn.locked {
     panel.innerHTML = '' +
       '<div class="text-size-title">Размер текста</div>' +
       '<div class="text-size-row">' +
-        '<button id="textSizeSmallBtn" type="button" class="text-size-btn">A−</button>' +
+        '<button id="textSizeMinus" type="button" class="text-size-btn">A−</button>' +
         '<div id="textSizeLabel" class="text-size-label">Обычный</div>' +
-        '<button id="textSizeLargeBtn" type="button" class="text-size-btn">A+</button>' +
+        '<button id="textSizePlus" type="button" class="text-size-btn">A+</button>' +
       '</div>' +
       '<div class="text-size-note">Можно увеличить шрифт для удобного чтения.</div>';
 
     dictSection.insertAdjacentElement('afterend', panel);
 
-    document.getElementById('textSizeSmallBtn').addEventListener('click', function () {
-      var current = getTextLevel();
-      applyTextLevel(current === 'large' ? 'normal' : 'small');
+    document.getElementById('textSizeMinus').addEventListener('click', function () {
+      setStep(getStep() - 1);
     });
-    document.getElementById('textSizeLargeBtn').addEventListener('click', function () {
-      var current = getTextLevel();
-      applyTextLevel(current === 'small' ? 'normal' : 'large');
+    document.getElementById('textSizePlus').addEventListener('click', function () {
+      setStep(getStep() + 1);
     });
+    return panel;
   }
 
-  function updateTextSizePanel() {
-    ensureTextSizePanel();
-    var panel = document.getElementById('textSizePanel');
+  function updatePanel() {
+    var panel = ensurePanel();
     if (!panel) return;
-
-    var queryInput = document.getElementById('queryInput');
-    var query = queryInput ? String(queryInput.value || '').trim() : '';
+    var step = getStep();
     var tab = (typeof activeTab !== 'undefined') ? activeTab : 'dict';
-    panel.style.display = (tab === 'dict' && !query) ? '' : 'none';
+    var q = '';
+    try { q = String((document.getElementById('queryInput') || {}).value || '').trim(); } catch (_) {}
+    panel.style.display = (tab === 'dict' && !q) ? '' : 'none';
 
-    var level = getTextLevel();
+    var minus = document.getElementById('textSizeMinus');
+    var plus = document.getElementById('textSizePlus');
     var label = document.getElementById('textSizeLabel');
-    var small = document.getElementById('textSizeSmallBtn');
-    var large = document.getElementById('textSizeLargeBtn');
-    if (label) label.textContent = level === 'small' ? 'Мелкий' : (level === 'large' ? 'Крупный' : 'Обычный');
-    if (small) small.classList.toggle('active', level === 'small');
-    if (large) large.classList.toggle('active', level === 'large');
-  }
-
-  function drawOnlineStatus() {
-    var logged = isLoggedInLocal();
-    var online = navigator.onLine !== false && lastReachable;
-    var tone = online ? 'ok' : 'warn';
-    var labelText = online ? 'Онлайн' : 'Офлайн';
-    var mainText = online ? 'В сети' : 'Нет сети';
-    var subText = online ? 'Сохранено на устройстве' : 'Последние данные доступны локально';
-
-    var compactBar = document.getElementById('compactAuthBar');
-    var label = document.getElementById('compactAuthLabel');
-    var dot = document.getElementById('compactAuthDot');
-    var modalDot = document.getElementById('compactAuthStatusDot');
-    var main = document.getElementById('compactAuthStatusMain');
-    var sub = document.getElementById('compactAuthStatusSub');
-    var accessMain = document.getElementById('compactAuthAccessMain');
-    var accessSub = document.getElementById('compactAuthAccessSub');
-    var accessBtn = document.getElementById('compactAuthAccessBtn');
-
-    if (compactBar) compactBar.style.display = logged ? 'flex' : 'none';
-    [dot, modalDot].forEach(function (el) { if (el) el.className = 'compact-auth-dot ' + tone; });
-    if (label) label.textContent = logged ? labelText : 'Вход';
-    if (main) main.textContent = logged ? mainText : 'Требуется вход';
-    if (sub) sub.textContent = logged ? subText : 'Войдите через Google';
-    if (accessMain) accessMain.textContent = logged ? 'Доступ открыт' : 'Войдите через Google';
-    if (accessSub) accessSub.textContent = logged ? 'Избранное и блокнот работают локально на устройстве' : 'После входа доступны избранное и блокнот';
-    if (accessBtn) accessBtn.textContent = '☁️ Синхронизация';
-
-    var sync = document.getElementById('syncIndicator');
-    var trial = document.getElementById('trialIndicator');
-    if (logged) {
-      if (sync) sync.style.display = 'none';
-      if (trial) trial.style.display = 'none';
-      document.body.classList.add('logged-in-compact');
-      document.documentElement.classList.add('prelogged-in-compact');
+    if (label) label.textContent = labels[step] || labels[0];
+    if (minus) {
+      minus.disabled = step <= 0;
+      minus.classList.toggle('ready', step > 0);
     }
-  }
-
-  function checkRealOnline() {
-    if (navigator.onLine === false) {
-      lastReachable = false;
-      drawOnlineStatus();
-      return;
-    }
-    try {
-      fetch('https://www.gstatic.com/generate_204?arabrus=' + Date.now(), { mode: 'no-cors', cache: 'no-store' })
-        .then(function () { lastReachable = true; drawOnlineStatus(); })
-        .catch(function () { lastReachable = false; drawOnlineStatus(); });
-    } catch (_) {
-      lastReachable = navigator.onLine !== false;
-      drawOnlineStatus();
-    }
-  }
-
-  function installSafeHooks() {
-    var query = document.getElementById('queryInput');
-    if (query && !query.__arabrusTextSizeHooked) {
-      query.__arabrusTextSizeHooked = true;
-      query.addEventListener('input', function () { setTimeout(updateTextSizePanel, 0); });
-    }
-
-    if (typeof renderApp === 'function' && !renderApp.__arabrusPolishWrapped) {
-      var originalRenderApp = renderApp;
-      renderApp = function () {
-        var result = originalRenderApp.apply(this, arguments);
-        setTimeout(function () { updateTextSizePanel(); drawOnlineStatus(); }, 0);
-        return result;
-      };
-      renderApp.__arabrusPolishWrapped = true;
+    if (plus) {
+      plus.disabled = step >= 2;
+      plus.classList.toggle('ready', step < 2);
     }
   }
 
   function init() {
-    applyTextLevel(getTextLevel());
-    ensureTextSizePanel();
-    updateTextSizePanel();
-    drawOnlineStatus();
-    installSafeHooks();
-    setTimeout(function () { updateTextSizePanel(); drawOnlineStatus(); }, 300);
-    setTimeout(function () { updateTextSizePanel(); drawOnlineStatus(); }, 1200);
-    checkRealOnline();
+    setStep(getStep());
+    updatePanel();
+    var query = document.getElementById('queryInput');
+    if (query) query.addEventListener('input', function () { setTimeout(updatePanel, 0); });
+
+    if (typeof switchTab === 'function' && !switchTab.__textSizePatched) {
+      var oldSwitchTab = switchTab;
+      switchTab = function () {
+        var result = oldSwitchTab.apply(this, arguments);
+        setTimeout(updatePanel, 0);
+        return result;
+      };
+      switchTab.__textSizePatched = true;
+    }
+
+    window.updateTextSizePanel = updatePanel;
+    setTimeout(updatePanel, 300);
+    setTimeout(updatePanel, 1000);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
   else init();
-
-  window.addEventListener('online', checkRealOnline);
-  window.addEventListener('offline', function () { lastReachable = false; drawOnlineStatus(); });
-  document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) {
-      drawOnlineStatus();
-      updateTextSizePanel();
-      checkRealOnline();
-    }
-  });
-
-  setInterval(drawOnlineStatus, 2000);
-  setInterval(checkRealOnline, 20000);
 })();
 </script>
 
